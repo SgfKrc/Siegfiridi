@@ -1,4 +1,5 @@
 from siegfridi.core.models import Note, Project, Track
+from siegfridi.midi.files import load_project, save_project
 from siegfridi.sound.profiles import SoundProfile, StylePreset
 
 
@@ -53,3 +54,34 @@ def test_custom_sound_profile_and_style_preset_validate() -> None:
     )
 
     assert preset.sound_profile_ids == ("gothic-organ",)
+
+
+def test_midi_round_trip_preserves_project_boundary(tmp_path) -> None:
+    project = Project(
+        ppq=960,
+        tempo_bpm=137,
+        style_preset_id="dark-gothic",
+        tracks=[
+            Track(
+                name="Organ Lead",
+                role="melody",
+                sound_profile_id="gothic-organ",
+                notes=[
+                    Note(start_tick=0, duration_tick=480, pitch=72, velocity=110),
+                    Note(start_tick=480, duration_tick=240, pitch=74, velocity=96),
+                ],
+            )
+        ],
+    )
+    path = tmp_path / "round-trip.mid"
+
+    save_project(project, path)
+    restored = load_project(path)
+
+    assert restored.ppq == 960
+    # Standard MIDI stores tempo as integer microseconds per beat.
+    assert abs(restored.tempo_bpm - 137) < 1e-3
+    assert restored.tracks[0].name == "Organ Lead"
+    assert restored.tracks[0].role == "melody"
+    assert restored.tracks[0].sound_profile_id == "gothic-organ"
+    assert restored.tracks[0].notes == project.tracks[0].notes

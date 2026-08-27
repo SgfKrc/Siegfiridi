@@ -28,7 +28,7 @@ class Note:
     def end_tick(self) -> int:
         return self.start_tick + self.duration_tick
 
-    def quantized(self, grid_tick: int) -> "Note":
+    def quantized(self, grid_tick: int) -> Note:
         """Return a note with start and end snapped to a positive grid."""
         if grid_tick <= 0:
             raise ValueError("grid_tick must be positive")
@@ -64,7 +64,7 @@ class Project:
         if self.tempo_bpm <= 0:
             raise ValueError("tempo_bpm must be positive")
 
-    def quantized(self, grid_tick: int) -> "Project":
+    def quantized(self, grid_tick: int) -> Project:
         """Return a copy with all track notes snapped to the requested grid."""
         return Project(
             ppq=self.ppq,

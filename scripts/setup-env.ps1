@@ -38,9 +38,11 @@ function Write-OK([string]$Message) {
 }
 
 function Find-Python {
-    # 优先 py launcher 选择 3.11/3.12，回退到 PATH 中的 python
+    # 优先 py launcher 选择 3.11/3.12，回退到 PATH 中的 python。
+    # 注意：3.11 必须排在 3.12 之前——basic-pitch 在非 Darwin 且 Python>=3.11
+    # 时依赖 tensorflow<2.15.1，而该版本没有支持 Python 3.12 的 Windows wheel。
     $candidates = @()
-    foreach ($ver in @('3.12', '3.11')) {
+    foreach ($ver in @('3.11', '3.12')) {
         $py = Get-Command "py" -ErrorAction SilentlyContinue
         if ($py) {
             $candidates += , @("py -$ver", "-$ver")
@@ -107,8 +109,9 @@ if (-not (Test-Path $VenvPython)) {
 }
 
 # ---------- 2. 升级 pip ----------
-Write-Step "升级 pip / setuptools / wheel"
-& $VenvPython -m pip install --upgrade pip setuptools wheel
+Write-Step "升级 pip / 兼容版 setuptools / wheel"
+# Basic Pitch 0.4.0 -> resampy 0.4.2 仍使用 pkg_resources；兼容提示要求 setuptools<81。
+& $VenvPython -m pip install --upgrade pip 'setuptools<81' wheel
 if ($LASTEXITCODE -ne 0) { throw "pip 升级失败" }
 
 # ---------- 3. 安装项目与依赖组 ----------

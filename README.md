@@ -6,7 +6,7 @@ Siegfridi 是一个 Python-first 的 Windows MIDI 编曲工具，优先服务定
 
 ## 当前状态
 
-仓库处于初始化阶段，已建立 Python 包、核心音乐数据模型、定制音色配置模型和最小 PySide6 窗口壳。完整转录、钢琴卷帘和 FluidSynth 播放按 [立项计划](./立项计划.md) 的里程碑推进。
+P3 音频转录管线已可实际运行：环境固定为 `numpy<2`、TensorFlow 2.14、Basic Pitch 0.4，并已用合成三音符 WAV 实测生成 3 个候选音符。P4 已接入 SoundFont 清单/哈希校验、FluidSynth CLI 渲染和 pyFluidSynth 原生绑定兜底；当前环境已用 `TimGM6mb.sf2` 实测生成有声 WAV。
 
 ## 开发环境
 

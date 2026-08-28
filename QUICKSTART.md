@@ -68,6 +68,13 @@ python -m siegfridi                # 打开主窗口
 .\scripts\run-dev.ps1 -Offscreen
 ```
 
+生成主窗口截图进行视觉检查（默认 1440x900，截图写入 `.siegfridi/visual/main-window.png`）：
+
+```powershell
+$env:PYTHONPATH = "$PWD\src"
+python scripts\capture-gui.py
+```
+
 ## 6. 生成原创音色（本机开发可选）
 
 发行构建会自动执行，本机可手动生成项目原创 CC0 东方/黑暗哥特音色包：

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QToolBar,
@@ -104,7 +107,44 @@ QPushButton:hover { background: #4a4051; border-color: #c06b94; }
 QPushButton:pressed { background: #2e3240; }
 QPushButton:disabled { color: #777b86; background: #292d37; }
 QStatusBar { background: #20232c; color: #c9cbd4; }
+QScrollArea#controlScroll { background: transparent; border: 0; }
 """
+
+_THEME_PRESETS = (
+    ("dark-gothic", "Dark Gothic"),
+    ("high-contrast", "High Contrast"),
+    ("quiet-light", "Quiet Light"),
+)
+_THEME_OVERRIDES = {
+    "dark-gothic": "",
+    "high-contrast": """
+QMainWindow { background: #090b0e; }
+QToolBar, QStatusBar { background: #11151a; }
+QWidget#controlPanel, QGroupBox { background: rgba(12, 16, 20, 242); }
+QComboBox, QSpinBox, QDoubleSpinBox, QListWidget { background: #10151a; color: #ffffff; border-color: #8c9aa8; }
+QPushButton { background: #1b242d; color: #ffffff; border-color: #a9bac8; }
+QPushButton:hover { background: #2c3a46; border-color: #ffffff; }
+QListWidget { selection-background-color: #006f9f; }
+QLabel, QGroupBox { color: #ffffff; }
+""",
+    "quiet-light": """
+QMainWindow { background: #e9edf2; }
+QToolBar, QStatusBar { background: #d7dde5; }
+QToolButton, QStatusBar { color: #202631; }
+QWidget#controlPanel, QGroupBox { background: rgba(245, 247, 250, 242); }
+QGroupBox { color: #202631; border-color: #aab4c1; }
+QLabel { color: #303844; }
+QComboBox, QSpinBox, QDoubleSpinBox, QListWidget { background: #ffffff; color: #202631; border-color: #8d99a8; }
+QPushButton { background: #e2e7ed; color: #202631; border-color: #8d99a8; }
+QPushButton:hover { background: #d4dce5; border-color: #536779; }
+QListWidget { selection-background-color: #8fb5cc; }
+""",
+}
+
+
+def _theme_style(theme_id: str) -> str:
+    """Return a complete stylesheet while keeping the original dark theme stable."""
+    return _WORKBENCH_STYLE + _THEME_OVERRIDES.get(theme_id, _THEME_OVERRIDES["dark-gothic"])
 
 
 class _BackdropWidget(QWidget):
@@ -114,6 +154,9 @@ class _BackdropWidget(QWidget):
         super().__init__()
         self._pixmap = QPixmap()
         self._opacity = 0.18
+        self._protection = 0.44
+        self._fit_mode = "cover"
+        self._theme_id = "dark-gothic"
 
     def set_image(self, path: str | Path | None) -> bool:
         if path is None:
@@ -131,25 +174,45 @@ class _BackdropWidget(QWidget):
         self._opacity = max(0.0, min(1.0, float(value)))
         self.update()
 
+    def set_protection(self, value: float) -> None:
+        self._protection = max(0.0, min(1.0, float(value)))
+        self.update()
+
+    def set_fit_mode(self, mode: str) -> None:
+        self._fit_mode = mode if mode in {"cover", "fit"} else "cover"
+        self.update()
+
+    def set_theme(self, theme_id: str) -> None:
+        self._theme_id = theme_id if theme_id in {item[0] for item in _THEME_PRESETS} else "dark-gothic"
+        self.update()
+
     @property
     def opacity(self) -> float:
         return self._opacity
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor("#11131a"))
+        base_color = {
+            "dark-gothic": QColor("#11131a"),
+            "high-contrast": QColor("#090b0e"),
+            "quiet-light": QColor("#e9edf2"),
+        }[self._theme_id]
+        painter.fillRect(self.rect(), base_color)
         if self._pixmap.isNull() or self.width() <= 0 or self.height() <= 0:
             return
-        scaled = self._pixmap.scaled(
-            self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
+        aspect_mode = (
+            Qt.AspectRatioMode.KeepAspectRatio
+            if self._fit_mode == "fit"
+            else Qt.AspectRatioMode.KeepAspectRatioByExpanding
         )
+        scaled = self._pixmap.scaled(self.size(), aspect_mode, Qt.TransformationMode.SmoothTransformation)
         x = (self.width() - scaled.width()) // 2
         y = (self.height() - scaled.height()) // 2
         painter.setOpacity(self._opacity)
         painter.drawPixmap(x, y, scaled)
         painter.setOpacity(1.0)
         # Preserve text and note contrast even when a bright image is selected.
-        painter.fillRect(self.rect(), QColor(10, 11, 16, 112))
+        painter.fillRect(self.rect(), QColor(10, 11, 16, round(self._protection * 255)))
 
 
 class _MidiEventBridge(QObject):
@@ -210,7 +273,9 @@ class MainWindow(QMainWindow):
 
     def __init__(self, project: Project | None = None) -> None:
         super().__init__()
-        self.setStyleSheet(_WORKBENCH_STYLE)
+        self._settings = QSettings("Siegfridi", "Siegfridi")
+        self._theme_id = self._read_theme_id()
+        self.setStyleSheet(_theme_style(self._theme_id))
         self.setWindowTitle(f"Siegfridi {__version__}")
         self.resize(1200, 760)
         self.project = project or _starter_project()
@@ -227,9 +292,10 @@ class MainWindow(QMainWindow):
         self._transcription_timer.timeout.connect(self._poll_transcription)
         self._transcription_process: TranscriptionProcess | None = None
         self._pending_transcription: TranscriptionResult | None = None
-        self._settings = QSettings("Siegfridi", "Siegfridi")
         self._background_path: Path | None = None
         self._background_opacity = self._read_background_opacity()
+        self._background_fit = self._read_background_fit()
+        self._background_protection = self._read_background_protection()
         self._midi_mapping = self._read_midi_mapping()
         self._midi_input: MidiKeyboardInput | None = None
         self._midi_bridge = _MidiEventBridge(self)
@@ -240,6 +306,7 @@ class MainWindow(QMainWindow):
         self._midi_record_anchor_time = monotonic()
 
         self.roll = PianoRollView(self.project, self.command_stack)
+        self.roll.set_theme(self._theme_id)
         self.track_list = QListWidget()
         self.track_list.setMinimumWidth(240)
         self.track_list.currentRowChanged.connect(self._on_track_changed)
@@ -302,18 +369,24 @@ class MainWindow(QMainWindow):
 
         self.render_button = QPushButton("Render preview")
         self.render_button.setToolTip("Render the current project to .siegfridi/preview.wav")
+        self.render_button.setStatusTip("Render the current project to a WAV preview")
         self.render_button.clicked.connect(self._render_preview)
         if self.pack_combo.count() == 0:
             self.render_button.setEnabled(False)
 
         self._import_button = QPushButton("Import audio")
         self._import_button.setToolTip("Run Basic Pitch and prepare candidate notes")
+        self._import_button.setStatusTip("Run Basic Pitch and prepare candidate notes")
         self._import_button.clicked.connect(self.import_audio)
         self._cancel_import_button = QPushButton("Cancel import")
         self._cancel_import_button.setEnabled(False)
+        self._cancel_import_button.setToolTip("Cancel the running transcription without changing the project")
+        self._cancel_import_button.setStatusTip("Cancel the running transcription")
         self._cancel_import_button.clicked.connect(self.cancel_transcription)
         self._accept_button = QPushButton("Accept candidates")
         self._accept_button.setEnabled(False)
+        self._accept_button.setToolTip("Add the reviewed transcription candidates to a new track")
+        self._accept_button.setStatusTip("Add reviewed transcription candidates to the project")
         self._accept_button.clicked.connect(self.accept_transcription)
 
         self._project_info = QLabel()
@@ -322,6 +395,11 @@ class MainWindow(QMainWindow):
         self._pack_info.setWordWrap(True)
         self._style_info = QLabel()
         self._style_info.setWordWrap(True)
+        self._theme_combo = QComboBox()
+        for theme_id, theme_name in _THEME_PRESETS:
+            self._theme_combo.addItem(theme_name, theme_id)
+        self._theme_combo.setCurrentIndex(max(0, self._theme_combo.findData(self._theme_id)))
+        self._theme_combo.currentIndexChanged.connect(self._theme_changed)
         self._background_button = QPushButton("Choose image")
         self._background_button.setToolTip("Choose a local image for the workbench background")
         self._background_button.clicked.connect(self._choose_background)
@@ -340,6 +418,23 @@ class MainWindow(QMainWindow):
         self._background_opacity_spin.setValue(self._background_opacity)
         self._background_opacity_spin.setToolTip("Background image opacity; lower values keep notes easier to read")
         self._background_opacity_spin.valueChanged.connect(self._background_opacity_changed)
+        self._background_fit_combo = QComboBox()
+        self._background_fit_combo.addItem("Cover", "cover")
+        self._background_fit_combo.addItem("Fit", "fit")
+        self._background_fit_combo.setCurrentIndex(max(0, self._background_fit_combo.findData(self._background_fit)))
+        self._background_fit_combo.setToolTip("Cover crops to fill the workspace; Fit keeps the whole image visible")
+        self._background_fit_combo.currentIndexChanged.connect(self._background_fit_changed)
+        self._background_protection_spin = QDoubleSpinBox()
+        self._background_protection_spin.setRange(0.0, 1.0)
+        self._background_protection_spin.setDecimals(2)
+        self._background_protection_spin.setSingleStep(0.05)
+        self._background_protection_spin.setSuffix(" protection")
+        self._background_protection_spin.setValue(self._background_protection)
+        self._background_protection_spin.setToolTip("Dark overlay strength used to keep notes readable")
+        self._background_protection_spin.valueChanged.connect(self._background_protection_changed)
+        self._appearance_reset_button = QPushButton("Restore defaults")
+        self._appearance_reset_button.setToolTip("Restore the default theme and background settings")
+        self._appearance_reset_button.clicked.connect(self._reset_appearance)
         self._background_info = QLabel("No background image")
         self._background_info.setWordWrap(True)
 
@@ -380,10 +475,20 @@ class MainWindow(QMainWindow):
         self._refresh_info()
 
         self._play_button = QPushButton("Play")
+        self._play_button.setToolTip("Start playback from the current position")
+        self._play_button.setStatusTip("Start playback from the current position")
         self._pause_button = QPushButton("Pause")
+        self._pause_button.setToolTip("Pause or resume playback")
+        self._pause_button.setStatusTip("Pause or resume playback")
         self._stop_button = QPushButton("Stop")
+        self._stop_button.setToolTip("Stop playback and reset the position")
+        self._stop_button.setStatusTip("Stop playback and reset the position")
         self._mute_button = QPushButton("Mute track")
+        self._mute_button.setToolTip("Toggle mute for the selected track")
+        self._mute_button.setStatusTip("Toggle mute for the selected track")
         self._solo_button = QPushButton("Solo track")
+        self._solo_button.setToolTip("Toggle solo for the selected track")
+        self._solo_button.setStatusTip("Toggle solo for the selected track")
         self._play_button.clicked.connect(self._play)
         self._pause_button.clicked.connect(self._toggle_pause)
         self._stop_button.clicked.connect(self._stop_playback)
@@ -393,26 +498,36 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar("Edit")
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
-        new_action = QAction("New", self)
-        new_action.triggered.connect(lambda: self.new_project())
-        open_action = QAction("Open", self)
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(lambda: self.open_project())
-        save_action = QAction("Save", self)
-        save_action.setShortcut("Ctrl+S")
-        save_action.triggered.connect(lambda: self.save_project())
-        toolbar.addAction(new_action)
-        toolbar.addAction(open_action)
-        toolbar.addAction(save_action)
+        self._new_action = QAction("New", self)
+        self._new_action.setToolTip("Create a new project")
+        self._new_action.setStatusTip("Create a new project")
+        self._new_action.triggered.connect(lambda: self.new_project())
+        self._open_action = QAction("Open", self)
+        self._open_action.setShortcut("Ctrl+O")
+        self._open_action.setToolTip("Open a Siegfridi project (Ctrl+O)")
+        self._open_action.setStatusTip("Open a Siegfridi project")
+        self._open_action.triggered.connect(self.open_project)
+        self._save_action = QAction("Save", self)
+        self._save_action.setShortcut("Ctrl+S")
+        self._save_action.setToolTip("Save the current project (Ctrl+S)")
+        self._save_action.setStatusTip("Save the current project")
+        self._save_action.triggered.connect(self.save_project)
+        toolbar.addAction(self._new_action)
+        toolbar.addAction(self._open_action)
+        toolbar.addAction(self._save_action)
         toolbar.addSeparator()
-        undo_action = QAction("Undo", self)
-        redo_action = QAction("Redo", self)
-        undo_action.setShortcut("Ctrl+Z")
-        redo_action.setShortcut("Ctrl+Y")
-        undo_action.triggered.connect(self.command_stack.undo)
-        redo_action.triggered.connect(self.command_stack.redo)
-        toolbar.addAction(undo_action)
-        toolbar.addAction(redo_action)
+        self._undo_action = QAction("Undo", self)
+        self._undo_action.setShortcut("Ctrl+Z")
+        self._undo_action.setToolTip("Undo the last edit (Ctrl+Z)")
+        self._undo_action.setStatusTip("Undo the last edit")
+        self._undo_action.triggered.connect(self.command_stack.undo)
+        self._redo_action = QAction("Redo", self)
+        self._redo_action.setShortcut("Ctrl+Y")
+        self._redo_action.setToolTip("Redo the last undone edit (Ctrl+Y)")
+        self._redo_action.setStatusTip("Redo the last undone edit")
+        self._redo_action.triggered.connect(self.command_stack.redo)
+        toolbar.addAction(self._undo_action)
+        toolbar.addAction(self._redo_action)
         toolbar.addSeparator()
         toolbar.addWidget(self._play_button)
         toolbar.addWidget(self._pause_button)
@@ -434,9 +549,13 @@ class MainWindow(QMainWindow):
 
         appearance_group = QGroupBox("Appearance")
         appearance_form = QFormLayout(appearance_group)
+        appearance_form.addRow("Theme", self._theme_combo)
         appearance_form.addRow("Background", background_actions)
         appearance_form.addRow("Image opacity", self._background_opacity_spin)
+        appearance_form.addRow("Image fit", self._background_fit_combo)
+        appearance_form.addRow("Protection", self._background_protection_spin)
         appearance_form.addRow(self._background_info)
+        appearance_form.addRow(self._appearance_reset_button)
         panel_layout.addWidget(appearance_group)
 
         midi_group = QGroupBox("MIDI Keyboard")
@@ -473,12 +592,22 @@ class MainWindow(QMainWindow):
         panel_layout.addWidget(self._solo_button)
         panel_layout.addWidget(self._project_info)
 
+        control_scroll = QScrollArea()
+        control_scroll.setObjectName("controlScroll")
+        control_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        control_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        control_scroll.setWidgetResizable(True)
+        control_scroll.setMinimumWidth(360)
+        control_scroll.setMaximumWidth(460)
+        control_scroll.setWidget(panel)
+        self._control_scroll = control_scroll
+
         workspace = QWidget()
         workspace.setObjectName("workspace")
         workspace.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         layout = QHBoxLayout(workspace)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(panel)
+        layout.addWidget(control_scroll)
         layout.addWidget(self.roll, 1)
         self._backdrop = _BackdropWidget()
         backdrop_layout = QHBoxLayout(self._backdrop)
@@ -537,21 +666,66 @@ class MainWindow(QMainWindow):
         marker = " *" if self._dirty else ""
         self.setWindowTitle(f"Siegfridi {__version__}{marker}")
 
-    def _read_background_opacity(self) -> float:
-        raw_value = self._settings.value("appearance/background_opacity", 0.18)
+    @staticmethod
+    def _setting_value(settings: QSettings, key: str, default, *compatibility_keys: str):
+        """Read a namespaced preference while accepting keys from early builds."""
+        for candidate in (key, *compatibility_keys):
+            if settings.contains(candidate):
+                return settings.value(candidate)
+        return default
+
+    @staticmethod
+    def _unit_value(value, default: float) -> float:
         try:
-            return max(0.0, min(1.0, float(raw_value)))
+            parsed = float(value)
         except (TypeError, ValueError):
-            return 0.18
+            return default
+        return max(0.0, min(1.0, parsed)) if math.isfinite(parsed) else default
+
+    def _read_theme_id(self) -> str:
+        value = self._setting_value(self._settings, "appearance/theme", "dark-gothic", "theme")
+        return value if isinstance(value, str) and value in dict(_THEME_PRESETS) else "dark-gothic"
+
+    def _read_background_opacity(self) -> float:
+        raw_value = self._setting_value(
+            self._settings,
+            "appearance/background_opacity",
+            0.18,
+            "background_opacity",
+        )
+        return self._unit_value(raw_value, 0.18)
+
+    def _read_background_fit(self) -> str:
+        value = self._setting_value(self._settings, "appearance/background_fit", "cover", "background_fit")
+        return value if isinstance(value, str) and value in {"cover", "fit"} else "cover"
+
+    def _read_background_protection(self) -> float:
+        value = self._setting_value(
+            self._settings,
+            "appearance/background_protection",
+            0.44,
+            "background_protection",
+        )
+        return self._unit_value(value, 0.44)
 
     def _load_background_preferences(self) -> None:
+        self._backdrop.set_theme(self._theme_id)
         self._backdrop.set_opacity(self._background_opacity)
-        raw_path = self._settings.value("appearance/background_path", "")
+        self._backdrop.set_fit_mode(self._background_fit)
+        self._backdrop.set_protection(self._background_protection)
+        self.roll.set_background_fit(self._background_fit)
+        self.roll.set_background_protection(self._background_protection)
+        raw_path = self._setting_value(self._settings, "appearance/background_path", "", "background_path")
         if isinstance(raw_path, str) and raw_path:
             candidate = Path(raw_path).expanduser()
             if candidate.is_file() and self._backdrop.set_image(candidate):
                 self._background_path = candidate
-                self.roll.set_background_image(str(candidate), self._background_opacity)
+                self.roll.set_background_image(
+                    str(candidate),
+                    self._background_opacity,
+                    self._background_fit,
+                    self._background_protection,
+                )
             else:
                 self._settings.remove("appearance/background_path")
         self._refresh_background_info()
@@ -581,7 +755,12 @@ class MainWindow(QMainWindow):
         if not candidate.is_file() or not self._backdrop.set_image(candidate):
             self.statusBar().showMessage(f"Background failed to load: {candidate}")
             return False
-        if not self.roll.set_background_image(str(candidate), self._background_opacity):
+        if not self.roll.set_background_image(
+            str(candidate),
+            self._background_opacity,
+            self._background_fit,
+            self._background_protection,
+        ):
             self.statusBar().showMessage(f"Background failed to load: {candidate}")
             return False
         self._background_path = candidate
@@ -593,7 +772,7 @@ class MainWindow(QMainWindow):
 
     def set_background_opacity(self, value: float, *, persist: bool = True) -> None:
         """Set image opacity through the same bounded control used by the UI."""
-        clamped = max(0.0, min(1.0, float(value)))
+        clamped = self._unit_value(value, 0.18)
         blocked = self._background_opacity_spin.blockSignals(True)
         try:
             self._background_opacity_spin.setValue(clamped)
@@ -605,6 +784,81 @@ class MainWindow(QMainWindow):
         if persist:
             self._settings.setValue("appearance/background_opacity", clamped)
         self._refresh_background_info()
+
+    def set_background_fit(self, fit_mode: str, *, persist: bool = True) -> None:
+        """Choose whether a background covers the workspace or remains fully visible."""
+        mode = fit_mode if fit_mode in {"cover", "fit"} else "cover"
+        blocked = self._background_fit_combo.blockSignals(True)
+        try:
+            self._background_fit_combo.setCurrentIndex(max(0, self._background_fit_combo.findData(mode)))
+        finally:
+            self._background_fit_combo.blockSignals(blocked)
+        self._background_fit = mode
+        self._backdrop.set_fit_mode(mode)
+        self.roll.set_background_fit(mode)
+        if persist:
+            self._settings.setValue("appearance/background_fit", mode)
+        self._refresh_background_info()
+
+    def set_background_protection(self, value: float, *, persist: bool = True) -> None:
+        """Set the readability overlay strength independently from image opacity."""
+        clamped = self._unit_value(value, 0.44)
+        blocked = self._background_protection_spin.blockSignals(True)
+        try:
+            self._background_protection_spin.setValue(clamped)
+        finally:
+            self._background_protection_spin.blockSignals(blocked)
+        self._background_protection = clamped
+        self._backdrop.set_protection(clamped)
+        self.roll.set_background_protection(clamped)
+        if persist:
+            self._settings.setValue("appearance/background_protection", clamped)
+        self._refresh_background_info()
+
+    def set_theme(self, theme_id: str, *, persist: bool = True) -> None:
+        """Apply a named UI theme without changing project style metadata."""
+        selected = theme_id if theme_id in dict(_THEME_PRESETS) else "dark-gothic"
+        self._theme_id = selected
+        blocked = self._theme_combo.blockSignals(True)
+        try:
+            self._theme_combo.setCurrentIndex(max(0, self._theme_combo.findData(selected)))
+        finally:
+            self._theme_combo.blockSignals(blocked)
+        self.setStyleSheet(_theme_style(selected))
+        if hasattr(self, "roll"):
+            self.roll.set_theme(selected)
+        if hasattr(self, "_backdrop"):
+            self._backdrop.set_theme(selected)
+        if persist:
+            self._settings.setValue("appearance/theme", selected)
+
+    def _theme_changed(self, _index: int) -> None:
+        theme_id = self._theme_combo.currentData()
+        if isinstance(theme_id, str):
+            self.set_theme(theme_id)
+
+    def _background_fit_changed(self, _index: int) -> None:
+        fit_mode = self._background_fit_combo.currentData()
+        if isinstance(fit_mode, str):
+            self.set_background_fit(fit_mode)
+
+    def _background_protection_changed(self, value: float) -> None:
+        self._background_protection = self._unit_value(value, 0.44)
+        if hasattr(self, "_backdrop"):
+            self._backdrop.set_protection(self._background_protection)
+        if hasattr(self, "roll"):
+            self.roll.set_background_protection(self._background_protection)
+        self._settings.setValue("appearance/background_protection", self._background_protection)
+        if hasattr(self, "_background_info"):
+            self._refresh_background_info()
+
+    def _reset_appearance(self) -> None:
+        self.set_theme("dark-gothic")
+        self.set_background_image(None)
+        self.set_background_opacity(0.18)
+        self.set_background_fit("cover")
+        self.set_background_protection(0.44)
+        self.statusBar().showMessage("Appearance restored")
 
     def _choose_background(self) -> None:
         selected, _ = QFileDialog.getOpenFileName(
@@ -621,7 +875,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Background cleared")
 
     def _background_opacity_changed(self, value: float) -> None:
-        self._background_opacity = max(0.0, min(1.0, float(value)))
+        self._background_opacity = self._unit_value(value, 0.18)
         if hasattr(self, "_backdrop"):
             self._backdrop.set_opacity(self._background_opacity)
         if hasattr(self, "roll"):
@@ -767,9 +1021,12 @@ class MainWindow(QMainWindow):
         if self._midi_thru_check.isChecked():
             output = self.player.output
             if output is None:
-                output = open_default_output()
-                if output is not None:
-                    self.player.set_output(output)
+                try:
+                    output = open_default_output()
+                    if output is not None:
+                        self.player.set_output(output)
+                except (OSError, RuntimeError, ValueError):
+                    output_error = True
             if output is not None:
                 try:
                     output.send(event.to_message())
@@ -814,6 +1071,7 @@ class MainWindow(QMainWindow):
     def _sync_playback_cursor(self) -> None:
         position = getattr(self.player, "position_tick", 0)
         if isinstance(position, int):
+            self.roll.set_playback_tick(position)
             blocked = self._position_slider.blockSignals(True)
             self._position_slider.setValue(position)
             self._position_slider.blockSignals(blocked)
@@ -827,6 +1085,7 @@ class MainWindow(QMainWindow):
             self.player.seek(value)
         except (AttributeError, ValueError):
             return
+        self.roll.set_playback_tick(value)
         self.statusBar().showMessage(f"Position: {value} ticks")
 
     def _sync_track_controls(self) -> None:
@@ -941,6 +1200,22 @@ class MainWindow(QMainWindow):
             return
         self.statusBar().showMessage(f"Preview rendered: {output}")
 
+    def _set_transcription_idle(self) -> None:
+        """Restore controls after a transcription job finishes or is cancelled."""
+        self._transcription_timer.stop()
+        self._import_button.setEnabled(True)
+        self._cancel_import_button.setEnabled(False)
+
+    def _finish_transcription_failure(self, error: str, *, detail: str | None = None) -> None:
+        """Clear a failed job without allowing a worker callback to break the UI."""
+        if detail is not None:
+            self._write_transcription_log("error", detail)
+        self._pending_transcription = None
+        self._accept_button.setEnabled(False)
+        self._candidate_info.setText(f"Transcription failed: {error}")
+        self._set_transcription_idle()
+        self.statusBar().showMessage("Transcription failed; project is unchanged")
+
     def import_audio(self, path: str | Path | None = None) -> None:
         """Start a cancellable Basic Pitch job and poll it from the Qt event loop."""
         if self._transcription_process is not None and self._transcription_process.is_running:
@@ -951,6 +1226,7 @@ class MainWindow(QMainWindow):
                 self, "Import Audio", "", "Audio (*.wav *.flac *.ogg *.mp3)"
             )
             if not selected:
+                self.statusBar().showMessage("Audio import cancelled")
                 return
             path = selected
         request = TranscriptionRequest(str(path), cache_dir=str(Path.cwd() / ".siegfridi" / "audio-cache"))
@@ -961,6 +1237,7 @@ class MainWindow(QMainWindow):
             self._transcription_process = None
             self._write_transcription_log("start-failed", str(exc))
             self.statusBar().showMessage(f"Transcription failed: {exc}")
+            self._candidate_info.setText(f"Transcription failed: {exc}")
             return
         self._import_button.setEnabled(False)
         self._cancel_import_button.setEnabled(True)
@@ -974,8 +1251,22 @@ class MainWindow(QMainWindow):
         if process is None:
             self._transcription_timer.stop()
             return
-        messages = process.poll()
+        try:
+            messages = process.poll()
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._finish_transcription_failure(str(exc), detail=str(exc))
+            try:
+                process.close()
+            except (OSError, RuntimeError, ValueError):
+                pass
+            self._transcription_process = None
+            return
+        invalid_response = False
         for message in messages:
+            if not isinstance(message, dict):
+                self._finish_transcription_failure("invalid worker response", detail=repr(message))
+                invalid_response = True
+                break
             message_type = message.get("type")
             if message_type == "completed" and isinstance(message.get("result"), TranscriptionResult):
                 self._pending_transcription = message["result"]
@@ -986,12 +1277,23 @@ class MainWindow(QMainWindow):
                 error = str(message.get("error", "unknown transcription error"))
                 self._write_transcription_log(str(message.get("error_type", "error")), error)
                 self._candidate_info.setText(f"Transcription failed: {error}")
+                self._pending_transcription = None
+                self._accept_button.setEnabled(False)
                 self.statusBar().showMessage("Transcription failed; project is unchanged")
+        if invalid_response:
+            try:
+                process.close()
+            except (OSError, RuntimeError, ValueError):
+                pass
+            self._transcription_process = None
+            return
         if not process.is_running:
-            self._transcription_timer.stop()
-            self._import_button.setEnabled(True)
-            self._cancel_import_button.setEnabled(False)
-            process.close()
+            self._set_transcription_idle()
+            try:
+                process.close()
+            except (OSError, RuntimeError, ValueError) as exc:
+                self._write_transcription_log("close-failed", str(exc))
+                self.statusBar().showMessage(f"Transcription cleanup warning: {exc}")
             self._transcription_process = None
 
     def _refresh_candidate_info(self, _value: float | None = None) -> None:
@@ -1009,13 +1311,18 @@ class MainWindow(QMainWindow):
         result = self._pending_transcription
         if result is None:
             return
-        track = append_result_track(
-            self.project,
-            result,
-            track_name=f"Transcription: {Path(result.source).stem}",
-            minimum_confidence=self._confidence_spin.value(),
-            grid_tick=self._quantize_spin.value(),
-        )
+        try:
+            track = append_result_track(
+                self.project,
+                result,
+                track_name=f"Transcription: {Path(result.source).stem}",
+                minimum_confidence=self._confidence_spin.value(),
+                grid_tick=self._quantize_spin.value(),
+            )
+        except (OSError, ValueError, TypeError) as exc:
+            self.statusBar().showMessage(f"Transcription accept failed: {exc}")
+            self._candidate_info.setText(f"Could not accept transcription: {exc}")
+            return
         self._pending_transcription = None
         self._accept_button.setEnabled(False)
         self._populate_tracks()
@@ -1029,59 +1336,91 @@ class MainWindow(QMainWindow):
 
     def cancel_transcription(self) -> None:
         process = self._transcription_process
+        cancel_error: str | None = None
         if process is not None:
-            process.cancel()
-            process.close()
-            self._write_transcription_log("cancelled", process.request.audio_path)
+            try:
+                process.cancel()
+            except (OSError, RuntimeError, ValueError) as exc:
+                cancel_error = str(exc)
+            try:
+                process.close()
+            except (OSError, RuntimeError, ValueError) as exc:
+                cancel_error = cancel_error or str(exc)
+            request = getattr(process, "request", None)
+            self._write_transcription_log("cancelled", str(getattr(request, "audio_path", "unknown")))
         self._transcription_process = None
-        self._transcription_timer.stop()
-        self._import_button.setEnabled(True)
-        self._cancel_import_button.setEnabled(False)
+        self._set_transcription_idle()
         self._pending_transcription = None
         self._accept_button.setEnabled(False)
         self._candidate_info.setText("Transcription cancelled; project is unchanged")
-        self.statusBar().showMessage("Transcription cancelled")
+        if process is not None:
+            message = "Transcription cancelled"
+            if cancel_error:
+                message = f"Transcription cancelled; cleanup warning: {cancel_error}"
+            self.statusBar().showMessage(message)
+        else:
+            self.statusBar().showMessage("No transcription running")
 
     def _write_transcription_log(self, event: str, detail: str) -> None:
         log_path = Path.cwd() / ".siegfridi" / "transcription.log"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(UTC).isoformat()
-        with log_path.open("a", encoding="utf-8") as stream:
-            stream.write(f"{timestamp}\t{event}\t{detail}\n")
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(UTC).isoformat()
+            with log_path.open("a", encoding="utf-8") as stream:
+                stream.write(f"{timestamp}\t{event}\t{detail}\n")
+        except OSError as exc:
+            self.statusBar().showMessage(f"Transcription log unavailable: {exc}")
 
     def _play(self) -> None:
-        if self.player.output is None:
-            output = open_default_output()
-            if output is not None:
-                self.player.set_output(output)
-        start_tick = self._position_slider.value()
-        if start_tick:
-            self.player.start(self.project, start_tick)
-        else:
-            self.player.start(self.project)
+        try:
+            if self.player.output is None:
+                output = open_default_output()
+                if output is not None:
+                    self.player.set_output(output)
+            start_tick = self._position_slider.value()
+            if start_tick:
+                self.player.start(self.project, start_tick)
+            else:
+                self.player.start(self.project)
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._playback_timer.stop()
+            self.statusBar().showMessage(f"Playback failed: {exc}")
+            return
         self._playback_timer.start()
         message = "Playing" if self.player.output is not None else "Playing (no MIDI output device)"
         self.statusBar().showMessage(message)
 
     def _toggle_pause(self) -> None:
         if not getattr(self.player, "is_playing", False):
+            self.statusBar().showMessage("Playback is not running")
             return
-        if getattr(self.player, "is_paused", False):
-            self.player.resume()
-            self._pause_button.setText("Pause")
-            self.statusBar().showMessage("Playing")
-        else:
-            self.player.pause()
-            self._pause_button.setText("Resume")
-            self.statusBar().showMessage("Paused")
+        try:
+            if getattr(self.player, "is_paused", False):
+                self.player.resume()
+                self._pause_button.setText("Pause")
+                self.statusBar().showMessage("Playing")
+            else:
+                self.player.pause()
+                self._pause_button.setText("Resume")
+                self.statusBar().showMessage("Paused")
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.statusBar().showMessage(f"Pause/resume failed: {exc}")
 
     def _stop_playback(self) -> None:
-        self.player.stop()
+        stop_error: str | None = None
+        try:
+            self.player.stop()
+        except (OSError, RuntimeError, ValueError) as exc:
+            stop_error = str(exc)
         self._playback_timer.stop()
         self._pause_button.setText("Pause")
         blocked = self._position_slider.blockSignals(True)
         self._position_slider.setValue(0)
         self._position_slider.blockSignals(blocked)
+        self.roll.set_playback_tick(0)
+        self.statusBar().showMessage(
+            f"Stop playback failed: {stop_error}" if stop_error else "Playback stopped"
+        )
 
     def new_project(self) -> None:
         self._replace_project(Project(tracks=[Track(name="Track 1")]))
@@ -1119,6 +1458,7 @@ class MainWindow(QMainWindow):
                 self, "Open Siegfridi Project", "", "Siegfridi Project (*.siegfridi)"
             )
             if not selected:
+                self.statusBar().showMessage("Open cancelled")
                 return None
             path = selected
         try:
@@ -1143,6 +1483,7 @@ class MainWindow(QMainWindow):
                 self, "Save Siegfridi Project", "", "Siegfridi Project (*.siegfridi)"
             )
             if not selected:
+                self.statusBar().showMessage("Save cancelled")
                 return None
             destination = Path(selected)
             if destination.suffix.lower() != ".siegfridi":
@@ -1165,6 +1506,7 @@ class MainWindow(QMainWindow):
     def _toggle_mute(self) -> None:
         track = self._current_track()
         if track is None:
+            self.statusBar().showMessage("Select a track before muting")
             return
         track.muted = not track.muted
         self._populate_tracks()
@@ -1178,6 +1520,7 @@ class MainWindow(QMainWindow):
     def _toggle_solo(self) -> None:
         track = self._current_track()
         if track is None:
+            self.statusBar().showMessage("Select a track before enabling solo")
             return
         track.solo = not track.solo
         self._populate_tracks()
@@ -1195,7 +1538,10 @@ class MainWindow(QMainWindow):
         output = self.player.output
         close = getattr(output, "close", None)
         if close is not None:
-            close()
+            try:
+                close()
+            except (OSError, RuntimeError, ValueError) as exc:
+                self.statusBar().showMessage(f"MIDI output close failed: {exc}")
         super().closeEvent(event)
 
 

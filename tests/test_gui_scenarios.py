@@ -11,7 +11,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from siegfridi.app.main_window import MainWindow
-from siegfridi.app.piano_roll import PianoRollView
+from siegfridi.app.piano_roll import PianoRollNoteItem, PianoRollView
 from siegfridi.core.editing import CommandStack
 from siegfridi.core.models import Note, Project, Track
 from siegfridi.midi import MidiKeyboardEvent
@@ -139,6 +139,52 @@ def test_piano_roll_pitch_keyboard_is_read_only_and_labeled(qapp: QApplication) 
     qapp.processEvents()
 
 
+def test_piano_roll_ruler_and_playback_cursor_are_readable(qapp: QApplication) -> None:
+    project = Project(tracks=[Track("Lead", notes=[Note(0, 480, 60)])])
+    view = PianoRollView(project, CommandStack())
+    view.resize(800, 600)
+    view.show()
+    qapp.processEvents()
+
+    assert view.scene().sceneRect().height() == pytest.approx(
+        view.RULER_HEIGHT + 128 * view.ROW_HEIGHT
+    )
+    assert view._ruler_labels[0].text() == "0"
+    ruler_point = view.mapFromScene(QPointF(view._tick_to_x(240), view.RULER_HEIGHT / 2))
+    QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=ruler_point)
+    assert project.tracks[0].notes == [Note(0, 480, 60)]
+
+    view.set_playback_tick(960)
+    assert view.playback_tick == 960
+    assert view._playback_cursor is not None
+    assert view._playback_cursor.line().x1() == pytest.approx(view._tick_to_x(960))
+    assert view._playback_cursor_label is not None
+    assert view._playback_cursor_label.text() == "960"
+    view.set_playback_tick(-10)
+    assert view.playback_tick == 0
+
+    view.close()
+    qapp.processEvents()
+
+
+def test_piano_roll_large_project_refresh_and_scroll_smoke(qapp: QApplication) -> None:
+    notes = [Note(index * 12, 30, 48 + index % 36, 80) for index in range(10_000)]
+    view = PianoRollView(Project(tracks=[Track("Dense", notes=notes)]), CommandStack())
+    view.resize(800, 600)
+    view.show()
+    qapp.processEvents()
+
+    note_items = [item for item in view.scene().items() if isinstance(item, PianoRollNoteItem)]
+    assert len(note_items) == 10_000
+    view.horizontalScrollBar().setValue(view.horizontalScrollBar().maximum())
+    view.set_playback_tick(notes[-1].end_tick)
+    qapp.processEvents()
+    assert view.playback_tick == notes[-1].end_tick
+    assert view._playback_cursor is not None
+    view.close()
+    qapp.processEvents()
+
+
 def test_main_window_control_workflow(qapp: QApplication, monkeypatch, tmp_path: Path) -> None:
     project = Project(
         tempo_bpm=120,
@@ -151,6 +197,15 @@ def test_main_window_control_workflow(qapp: QApplication, monkeypatch, tmp_path:
     window = MainWindow(project)
     window.show()
     qapp.processEvents()
+
+    assert window._play_button.toolTip()
+    assert window._pause_button.statusTip()
+    assert "Ctrl+O" in window._open_action.toolTip()
+    assert "Ctrl+S" in window._save_action.toolTip()
+    assert "Ctrl+Z" in window._undo_action.toolTip()
+    assert "Ctrl+Y" in window._redo_action.toolTip()
+    window._toggle_pause()
+    assert window.statusBar().currentMessage() == "Playback is not running"
 
     assert "muted" in window.track_list.item(0).text()
     assert "solo" in window.track_list.item(1).text()
@@ -193,6 +248,7 @@ def test_main_window_control_workflow(qapp: QApplication, monkeypatch, tmp_path:
     assert "no MIDI output" in window.statusBar().currentMessage()
     QTest.mouseClick(window._stop_button, Qt.MouseButton.LeftButton)
     assert fake_player.stopped is True
+    assert window.statusBar().currentMessage() == "Playback stopped"
     rendered = {}
 
     def fake_render(project_arg, manifest_arg, output_arg, **kwargs):
@@ -219,10 +275,42 @@ def test_main_window_control_workflow(qapp: QApplication, monkeypatch, tmp_path:
     window.track_list.setCurrentRow(-1)
     monkeypatch.setattr(window, "_current_track", lambda: None)
     window._toggle_mute()
+    assert "Select a track" in window.statusBar().currentMessage()
     window._toggle_solo()
+    assert "Select a track" in window.statusBar().currentMessage()
     window.close()
     qapp.processEvents()
     assert fake_player.stopped is True
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "theme"),
+    ((1440, 900, "dark-gothic"), (1440, 900, "quiet-light"), (900, 700, "high-contrast")),
+)
+def test_main_window_visual_profiles_fit_without_overflow(
+    qapp: QApplication, width: int, height: int, theme: str
+) -> None:
+    window = MainWindow(Project(tracks=[Track("Lead", notes=[Note(0, 480, 60)])]))
+    window.resize(width, height)
+    window.set_theme(theme, persist=False)
+    window.set_background_image(None, persist=False)
+    window.show()
+    qapp.processEvents()
+
+    assert (window.width(), window.height()) == (width, height)
+    assert window.centralWidget() is not None
+    assert window.rect().contains(window.centralWidget().geometry().topLeft())
+    assert window.rect().contains(window.centralWidget().geometry().bottomRight())
+    workspace = window._control_scroll.parentWidget()
+    assert workspace is not None
+    for widget in (window._control_scroll, window.roll):
+        assert workspace.rect().contains(widget.geometry().topLeft())
+        assert workspace.rect().contains(widget.geometry().bottomRight())
+        assert widget.width() > 0 and widget.height() > 0
+    assert not window._control_scroll.horizontalScrollBar().isVisible()
+    assert window._control_scroll.widget().height() > window._control_scroll.viewport().height()
+    window.close()
+    qapp.processEvents()
 
 
 def test_main_window_background_image_and_opacity_controls(qapp: QApplication, monkeypatch, tmp_path: Path) -> None:
@@ -258,6 +346,93 @@ def test_main_window_background_image_and_opacity_controls(qapp: QApplication, m
     assert not window._background_clear_button.isEnabled()
     window.close()
     qapp.processEvents()
+
+
+def test_main_window_appearance_preferences_persist_and_restore_defaults(
+    qapp: QApplication, tmp_path: Path
+) -> None:
+    from PySide6.QtCore import QSettings
+
+    image = QImage(48, 24, QImage.Format.Format_RGB32)
+    image.fill(0x007a455f)
+    image_path = tmp_path / "appearance.png"
+    assert image.save(str(image_path))
+
+    settings = QSettings("Siegfridi", "Siegfridi")
+    keys = (
+        "appearance/theme",
+        "appearance/background_path",
+        "appearance/background_opacity",
+        "appearance/background_fit",
+        "appearance/background_protection",
+        "theme",
+        "background_path",
+        "background_opacity",
+        "background_fit",
+        "background_protection",
+    )
+    previous = {key: settings.value(key) for key in keys if settings.contains(key)}
+    for key in keys:
+        settings.remove(key)
+    # Legacy top-level keys must still be understood by a current build.
+    settings.setValue("theme", "quiet-light")
+    settings.setValue("background_path", str(image_path))
+    settings.setValue("background_opacity", 0.31)
+    settings.setValue("background_fit", "fit")
+    settings.setValue("background_protection", 0.67)
+
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    reopened = None
+    window_closed = False
+    reopened_closed = False
+    try:
+        assert window._theme_id == "quiet-light"
+        assert window.roll._theme_id == "quiet-light"
+        assert window._backdrop._theme_id == "quiet-light"
+        assert window._background_path == image_path.resolve()
+        assert window._background_opacity == pytest.approx(0.31)
+        assert window._background_fit == "fit"
+        assert window._background_protection == pytest.approx(0.67)
+        assert window.roll._background_fit == "fit"
+        assert window.roll._background_protection == pytest.approx(0.67)
+
+        window.set_theme("high-contrast")
+        window.set_background_fit("cover")
+        window.set_background_protection(0.52)
+        window.set_background_opacity(0.24)
+        window.close()
+        window_closed = True
+        qapp.processEvents()
+
+        reopened = MainWindow(Project(tracks=[Track("Lead")]))
+        assert reopened._theme_id == "high-contrast"
+        assert reopened.roll._theme_id == "high-contrast"
+        assert reopened._backdrop._theme_id == "high-contrast"
+        assert reopened._background_path == image_path.resolve()
+        assert reopened._background_fit == "cover"
+        assert reopened._background_protection == pytest.approx(0.52)
+        assert reopened._background_opacity == pytest.approx(0.24)
+        assert reopened.roll._background_fit == "cover"
+
+        reopened._reset_appearance()
+        assert reopened._theme_id == "dark-gothic"
+        assert reopened.roll._theme_id == "dark-gothic"
+        assert reopened._backdrop._theme_id == "dark-gothic"
+        assert reopened._background_path is None
+        assert reopened._background_fit == "cover"
+        assert reopened._background_opacity == pytest.approx(0.18)
+        assert reopened._background_protection == pytest.approx(0.44)
+        assert reopened.roll._background_pixmap.isNull()
+    finally:
+        if not window_closed:
+            window.close()
+        if reopened is not None and not reopened_closed:
+            reopened.close()
+        qapp.processEvents()
+        for key in keys:
+            settings.remove(key)
+        for key, value in previous.items():
+            settings.setValue(key, value)
 
 
 def test_main_window_midi_device_connect_thru_and_disconnect(qapp: QApplication, monkeypatch) -> None:
@@ -445,6 +620,154 @@ def test_action_triggered_boolean_does_not_become_project_path(
         lambda *_args, **_kwargs: (str(path), ""),
     )
     assert window.open_project(False) == path
+    window.close()
+    qapp.processEvents()
+
+
+def test_main_window_file_dialog_cancellation_is_reported(qapp: QApplication, monkeypatch) -> None:
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    monkeypatch.setattr(
+        "siegfridi.app.main_window.QFileDialog.getOpenFileName",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+    assert window.open_project() is None
+    assert window.statusBar().currentMessage() == "Open cancelled"
+    assert window.import_audio() is None
+    assert window.statusBar().currentMessage() == "Audio import cancelled"
+    monkeypatch.setattr(
+        "siegfridi.app.main_window.QFileDialog.getSaveFileName",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+    assert window.save_project() is None
+    assert window.statusBar().currentMessage() == "Save cancelled"
+    window.close()
+    qapp.processEvents()
+
+
+def test_main_window_transcription_start_and_poll_failures_are_recoverable(
+    qapp: QApplication, monkeypatch, tmp_path: Path
+) -> None:
+    source = tmp_path / "broken.wav"
+    source.write_bytes(b"placeholder")
+
+    class StartFailure:
+        def __init__(self, _request) -> None:
+            pass
+
+        def start(self) -> None:
+            raise RuntimeError("worker unavailable")
+
+    monkeypatch.setattr("siegfridi.app.main_window.TranscriptionProcess", StartFailure)
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    window.import_audio(source)
+    assert "Transcription failed" in window.statusBar().currentMessage()
+    assert "worker unavailable" in window._candidate_info.text()
+    assert window._import_button.isEnabled()
+    assert not window._cancel_import_button.isEnabled()
+    window.close()
+    qapp.processEvents()
+
+
+def test_main_window_transcription_poll_failure_restores_controls(
+    qapp: QApplication, monkeypatch, tmp_path: Path
+) -> None:
+    source = tmp_path / "poll-failure.wav"
+    source.write_bytes(b"placeholder")
+
+    class PollFailure:
+        def __init__(self, request) -> None:
+            self.request = request
+            self.is_running = True
+            self.closed = False
+
+        def start(self) -> None:
+            pass
+
+        def poll(self) -> list[dict]:
+            raise RuntimeError("queue closed")
+
+        def close(self) -> None:
+            self.closed = True
+
+    process = None
+
+    def make_process(request):
+        nonlocal process
+        process = PollFailure(request)
+        return process
+
+    monkeypatch.setattr("siegfridi.app.main_window.TranscriptionProcess", make_process)
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    window.import_audio(source)
+    assert not window._import_button.isEnabled()
+    window._poll_transcription()
+    assert process is not None and process.closed
+    assert window._transcription_process is None
+    assert window._import_button.isEnabled()
+    assert not window._cancel_import_button.isEnabled()
+    assert not window._accept_button.isEnabled()
+    assert "Transcription failed" in window.statusBar().currentMessage()
+    window.close()
+    qapp.processEvents()
+
+
+def test_main_window_invalid_transcription_response_is_rejected(
+    qapp: QApplication, monkeypatch, tmp_path: Path
+) -> None:
+    source = tmp_path / "invalid-response.wav"
+    source.write_bytes(b"placeholder")
+
+    class InvalidResponse:
+        def __init__(self, request) -> None:
+            self.request = request
+            self.is_running = True
+            self.closed = False
+
+        def start(self) -> None:
+            pass
+
+        def poll(self) -> list[object]:
+            return ["not a message"]
+
+        def close(self) -> None:
+            self.closed = True
+
+    process = None
+
+    def make_process(request):
+        nonlocal process
+        process = InvalidResponse(request)
+        return process
+
+    monkeypatch.setattr("siegfridi.app.main_window.TranscriptionProcess", make_process)
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    window.import_audio(source)
+    window._poll_transcription()
+    assert process is not None and process.closed
+    assert window._transcription_process is None
+    assert window._import_button.isEnabled()
+    assert not window._accept_button.isEnabled()
+    assert "invalid worker response" in window._candidate_info.text()
+    window.close()
+    qapp.processEvents()
+
+
+def test_main_window_playback_failure_is_reported(qapp: QApplication, monkeypatch) -> None:
+    class FailingPlayer:
+        output = None
+
+        def start(self, _project) -> None:
+            raise RuntimeError("audio backend unavailable")
+
+        def stop(self) -> None:
+            pass
+
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    window.player = FailingPlayer()
+    monkeypatch.setattr("siegfridi.app.main_window.open_default_output", lambda: None)
+    window._play()
+    assert "Playback failed" in window.statusBar().currentMessage()
+    assert not window._playback_timer.isActive()
     window.close()
     qapp.processEvents()
 

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QKeyEvent, QPainter, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import (
+    QGraphicsLineItem,
     QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
@@ -50,8 +52,10 @@ class PianoRollView(QGraphicsView):
     """Viewport-cropped piano roll with basic note editing gestures."""
 
     ROW_HEIGHT = 14.0
+    RULER_HEIGHT = 28.0
     TICK_WIDTH = 0.25
     GRID_TICK = 120
+    RULER_TICK = GRID_TICK * 4
     HANDLE_WIDTH = 8.0
     MIN_DURATION_TICK = 30
     LEFT_MARGIN = 48.0
@@ -60,6 +64,35 @@ class PianoRollView(QGraphicsView):
     WHITE_KEY_BORDER = QColor("#9699a3")
     BLACK_KEY_COLOR = QColor("#171922")
     BLACK_KEY_BORDER = QColor("#08090d")
+    _THEME_COLORS: ClassVar[dict[str, dict[str, QColor]]] = {
+        "dark-gothic": {
+            "scene": QColor(23, 23, 29, 224),
+            "grid": QColor("#30313b"),
+            "beat": QColor("#484957"),
+            "bar": QColor("#746076"),
+            "ruler": QColor("#292d39"),
+            "ruler_text": QColor("#f0dbe5"),
+            "cursor": QColor("#f7d06b"),
+        },
+        "high-contrast": {
+            "scene": QColor("#090b0e"),
+            "grid": QColor("#202a33"),
+            "beat": QColor("#425466"),
+            "bar": QColor("#8bd6ff"),
+            "ruler": QColor("#18232c"),
+            "ruler_text": QColor("#ffffff"),
+            "cursor": QColor("#ffe066"),
+        },
+        "quiet-light": {
+            "scene": QColor("#f5f7fa"),
+            "grid": QColor("#cfd6df"),
+            "beat": QColor("#a5b1bf"),
+            "bar": QColor("#66839d"),
+            "ruler": QColor("#dce3eb"),
+            "ruler_text": QColor("#253342"),
+            "cursor": QColor("#c45b23"),
+        },
+    }
 
     def __init__(self, project: Project | None = None, command_stack: CommandStack | None = None) -> None:
         super().__init__()
@@ -82,6 +115,13 @@ class PianoRollView(QGraphicsView):
         self._keyboard_labels: dict[int, QGraphicsSimpleTextItem] = {}
         self._background_pixmap = QPixmap()
         self._background_opacity = 0.18
+        self._background_protection = 0.44
+        self._background_fit = "cover"
+        self._theme_id = "dark-gothic"
+        self._playback_tick = 0
+        self._playback_cursor: QGraphicsLineItem | None = None
+        self._playback_cursor_label: QGraphicsSimpleTextItem | None = None
+        self._ruler_labels: dict[int, QGraphicsSimpleTextItem] = {}
         self.command_stack.add_listener(self.refresh)
         self.refresh()
 
@@ -108,10 +148,12 @@ class PianoRollView(QGraphicsView):
         return max(0, round((x - self.LEFT_MARGIN) / self.TICK_WIDTH))
 
     def _pitch_to_y(self, pitch: int) -> float:
-        return (127 - pitch) * self.ROW_HEIGHT
+        return self.RULER_HEIGHT + (127 - pitch) * self.ROW_HEIGHT
 
     def _y_to_pitch(self, y: float) -> int:
-        return max(0, min(127, 127 - int(y // self.ROW_HEIGHT)))
+        if y < self.RULER_HEIGHT:
+            return 127
+        return max(0, min(127, 127 - int((y - self.RULER_HEIGHT) // self.ROW_HEIGHT)))
 
     def _snap(self, tick: int) -> int:
         return max(0, round(tick / self.GRID_TICK) * self.GRID_TICK)
@@ -128,7 +170,13 @@ class PianoRollView(QGraphicsView):
         colors = ("#d56a8b", "#6ab7d5", "#d5ad6a", "#9e7bd6", "#72c49a")
         return QColor(colors[self.track_index % len(colors)])
 
-    def set_background_image(self, path: str | None, opacity: float | None = None) -> bool:
+    def set_background_image(
+        self,
+        path: str | None,
+        opacity: float | None = None,
+        fit_mode: str | None = None,
+        protection: float | None = None,
+    ) -> bool:
         """Set the optional image drawn underneath the piano-roll grid."""
         if path is None:
             self._background_pixmap = QPixmap()
@@ -140,12 +188,45 @@ class PianoRollView(QGraphicsView):
         self._background_pixmap = pixmap
         if opacity is not None:
             self._background_opacity = max(0.0, min(1.0, float(opacity)))
+        if fit_mode is not None:
+            self._background_fit = fit_mode if fit_mode in {"cover", "fit"} else "cover"
+        if protection is not None:
+            self._background_protection = max(0.0, min(1.0, float(protection)))
         self.refresh()
         return True
 
     def set_background_opacity(self, opacity: float) -> None:
         self._background_opacity = max(0.0, min(1.0, float(opacity)))
         self.refresh()
+
+    def set_background_fit(self, fit_mode: str) -> None:
+        self._background_fit = fit_mode if fit_mode in {"cover", "fit"} else "cover"
+        self.refresh()
+
+    def set_background_protection(self, protection: float) -> None:
+        self._background_protection = max(0.0, min(1.0, float(protection)))
+        self.refresh()
+
+    def set_theme(self, theme_id: str) -> None:
+        self._theme_id = theme_id if theme_id in self._THEME_COLORS else "dark-gothic"
+        self.refresh()
+
+    @property
+    def playback_tick(self) -> int:
+        return self._playback_tick
+
+    def set_playback_tick(self, tick: int) -> None:
+        """Move the visible playback cursor without rebuilding note items."""
+        self._playback_tick = max(0, int(tick))
+        cursor_x = self._tick_to_x(self._playback_tick)
+        scene = self.scene()
+        if self._playback_cursor is None or cursor_x > scene.sceneRect().right():
+            self.refresh()
+            return
+        self._playback_cursor.setLine(cursor_x, self.RULER_HEIGHT, cursor_x, scene.sceneRect().bottom())
+        if self._playback_cursor_label is not None:
+            self._playback_cursor_label.setText(str(self._playback_tick))
+            self._playback_cursor_label.setPos(cursor_x + 4, self.RULER_HEIGHT - 18)
 
     @staticmethod
     def _pitch_label(pitch: int) -> str:
@@ -198,51 +279,94 @@ class PianoRollView(QGraphicsView):
 
     def refresh(self) -> None:
         scene = self.scene()
+        self._playback_cursor = None
+        self._playback_cursor_label = None
+        self._ruler_labels = {}
         scene.clear()
-        scene.setBackgroundBrush(QBrush(QColor(23, 23, 29, 224)))
+        colors = self._THEME_COLORS[self._theme_id]
+        scene.setBackgroundBrush(QBrush(colors["scene"]))
         max_tick = self.GRID_TICK * 8
         if self.project.tracks:
             track = self.project.tracks[self.track_index]
             max_tick = max(max_tick, max((note.end_tick for note in track.notes), default=0))
+        max_tick = max(max_tick, self._playback_tick)
         width = self._tick_to_x(max_tick + self.GRID_TICK)
-        height = 128 * self.ROW_HEIGHT
+        height = self.RULER_HEIGHT + 128 * self.ROW_HEIGHT
         scene.setSceneRect(0, 0, width, height)
 
         if not self._background_pixmap.isNull():
+            aspect_mode = (
+                Qt.AspectRatioMode.KeepAspectRatio
+                if self._background_fit == "fit"
+                else Qt.AspectRatioMode.KeepAspectRatioByExpanding
+            )
             scaled = self._background_pixmap.scaled(
-                int(width),
-                int(height),
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
+                int(width), int(height), aspect_mode, Qt.TransformationMode.SmoothTransformation
             )
             image_item = scene.addPixmap(scaled)
             image_item.setOpacity(self._background_opacity)
             image_item.setZValue(-20)
             shade = scene.addRect(0, 0, width, height, QPen(Qt.PenStyle.NoPen))
-            shade.setBrush(QBrush(QColor(10, 11, 16, 112)))
+            shade.setBrush(QBrush(QColor(10, 11, 16, round(self._background_protection * 255))))
             shade.setZValue(-10)
 
-        dark_pen = QPen(QColor("#25252d"))
-        beat_pen = QPen(QColor("#3a3a47"))
+        ruler = scene.addRect(
+            self.LEFT_MARGIN,
+            0,
+            width - self.LEFT_MARGIN,
+            self.RULER_HEIGHT,
+            QPen(Qt.PenStyle.NoPen),
+        )
+        ruler.setBrush(QBrush(colors["ruler"]))
+        ruler.setZValue(-1)
+        ruler.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+
+        dark_pen = QPen(colors["grid"])
+        beat_pen = QPen(colors["beat"])
+        bar_pen = QPen(colors["bar"], 1.25)
         for pitch in range(128):
             y = self._pitch_to_y(pitch)
             pen = beat_pen if pitch % 12 in (0, 5) else dark_pen
             scene.addLine(self.LEFT_MARGIN, y, width, y, pen)
         for tick in range(0, max_tick + self.GRID_TICK, self.GRID_TICK):
-            scene.addLine(self._tick_to_x(tick), 0, self._tick_to_x(tick), height, beat_pen)
+            pen = bar_pen if tick % self.RULER_TICK == 0 else beat_pen
+            scene.addLine(self._tick_to_x(tick), 0, self._tick_to_x(tick), height, pen)
+
+        for tick in range(0, max_tick + self.RULER_TICK, self.RULER_TICK):
+            label = scene.addSimpleText(str(tick))
+            label.setBrush(QBrush(colors["ruler_text"]))
+            label.setPos(self._tick_to_x(tick) + 4, 4)
+            label.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            label.setZValue(2)
+            self._ruler_labels[tick] = label
 
         self._draw_keyboard(scene, height)
 
         if not self.project.tracks:
             self.selected_note_index = None
-            return
-        for index, note in enumerate(self.project.tracks[self.track_index].notes):
-            item = PianoRollNoteItem(note, self.track_index, index)
-            item.setRect(*self._note_rect(note))
-            selected = index == self.selected_note_index
-            item.setBrush(QBrush(self._track_color().lighter(145 if selected else 100)))
-            item.setPen(QPen(QColor("#fff3f7") if selected else QColor("#111118"), 1.2))
-            scene.addItem(item)
+        else:
+            for index, note in enumerate(self.project.tracks[self.track_index].notes):
+                item = PianoRollNoteItem(note, self.track_index, index)
+                item.setRect(*self._note_rect(note))
+                selected = index == self.selected_note_index
+                item.setBrush(QBrush(self._track_color().lighter(145 if selected else 100)))
+                item.setPen(QPen(QColor("#fff3f7") if selected else QColor("#111118"), 1.2))
+                scene.addItem(item)
+
+        self._playback_cursor = scene.addLine(
+            self._tick_to_x(self._playback_tick),
+            self.RULER_HEIGHT,
+            self._tick_to_x(self._playback_tick),
+            height,
+            QPen(colors["cursor"], 1.6),
+        )
+        self._playback_cursor.setZValue(20)
+        self._playback_cursor.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self._playback_cursor_label = scene.addSimpleText(str(self._playback_tick))
+        self._playback_cursor_label.setBrush(QBrush(colors["cursor"]))
+        self._playback_cursor_label.setPos(self._tick_to_x(self._playback_tick) + 4, self.RULER_HEIGHT - 18)
+        self._playback_cursor_label.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self._playback_cursor_label.setZValue(21)
 
     def _note_item_at(self, view_pos) -> PianoRollNoteItem | None:
         item = self.itemAt(view_pos)
@@ -274,7 +398,7 @@ class PianoRollView(QGraphicsView):
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
-        if scene_pos.x() < self.LEFT_MARGIN:
+        if scene_pos.x() < self.LEFT_MARGIN or scene_pos.y() < self.RULER_HEIGHT:
             return
         if item is None:
             tick = self._snap(self._x_to_tick(scene_pos.x()))

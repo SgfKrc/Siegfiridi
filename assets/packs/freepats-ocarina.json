@@ -1,0 +1,14 @@
+{
+  "id": "freepats-ocarina",
+  "name": "FreePats Ocarina",
+  "version": "2024-10-02",
+  "soundfont": "Ocarina-20241002.sf2",
+  "sha256": "e92c42a68cb738663748ce512dfbc7f18c3c3ea38d12df9ce165b249e6da6bc6",
+  "license": "CC0-1.0",
+  "source_url": "https://github.com/freepats/ocarina1/releases/download/2024-10-02/Ocarina-SF2-20241002.7z",
+  "license_url": "https://freepats.zenvoid.org/Wind/ocarina.html",
+  "attribution": "Recorded by Xavimart (Javier), Gonzalo and Roberto for FreePats; version 2024-10-02.",
+  "profiles": [
+    {"id": "folk-wind", "name": "FreePats Ocarina", "program": 79}
+  ]
+}

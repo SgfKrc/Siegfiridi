@@ -1,0 +1,23 @@
+{
+  "id": "fluidr3-gm",
+  "name": "Fluid (R3) General MIDI",
+  "version": "3.1",
+  "soundfont": "FluidR3_GM.sf2",
+  "sha256": "74594e8f4250680adf590507a306655a299935343583256f3b722c48a1bc1cb0",
+  "license": "MIT",
+  "source_url": "https://github.com/pianobooster/fluid-soundfont/releases/download/v3.1/FluidR3_GM.sf2",
+  "license_url": "https://github.com/pianobooster/fluid-soundfont/blob/v3.1/COPYING",
+  "attribution": "Fluid (R3) SoundFont by Frank Wen; release 3.1, sourced from the Ubuntu fluid-soundfont package.",
+  "profiles": [
+    {"id": "lead-synth", "name": "GM Lead 1 (square)", "program": 80},
+    {"id": "folk-wind", "name": "GM Flute", "program": 73},
+    {"id": "electric-bass", "name": "GM Electric Bass (finger)", "program": 33},
+    {"id": "cathedral-organ", "name": "GM Church Organ", "program": 19},
+    {"id": "dark-choir", "name": "GM Choir Aahs", "program": 52},
+    {"id": "bowed-bass", "name": "GM Contrabass", "program": 43},
+    {"id": "fm-lead", "name": "GM Lead 1 (square)", "program": 80},
+    {"id": "chip-square", "name": "GM Lead 1 (square)", "program": 80},
+    {"id": "sampled-drums", "name": "GM Standard Drums", "program": 0},
+    {"id": "organ", "name": "GM Church Organ", "program": 19}
+  ]
+}

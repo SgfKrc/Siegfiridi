@@ -39,6 +39,9 @@ dev = [
     "pytest>=8,<9",
     "ruff>=0.8,<1",
 ]
+assets = [
+    "py7zr>=1,<2",
+]
 all = [
     "av>=14",
     "librosa>=0.10,<1",

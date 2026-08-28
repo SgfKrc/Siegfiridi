@@ -25,6 +25,15 @@ assets/packs/*.sf2
 assets/packs/*.sf3
 assets/packs/*.wav
 assets/packs/*.flac
+assets/packs/**/*.sf2
+assets/packs/**/*.sf3
+assets/packs/**/*.wav
+assets/packs/**/*.flac
+assets/packs/sources/**/*.sfz
+assets/packs/sources/**/*.wav
+assets/packs/sources/**/*.flac
+assets/packs/sources/**/*.zip
+assets/packs/**/*.7z
 assets/models/
 
 # Local tooling state

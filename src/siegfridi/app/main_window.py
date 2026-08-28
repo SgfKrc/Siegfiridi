@@ -212,13 +212,13 @@ class MainWindow(QMainWindow):
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
         new_action = QAction("New", self)
-        new_action.triggered.connect(self.new_project)
+        new_action.triggered.connect(lambda: self.new_project())
         open_action = QAction("Open", self)
         open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self.open_project)
+        open_action.triggered.connect(lambda: self.open_project())
         save_action = QAction("Save", self)
         save_action.setShortcut("Ctrl+S")
-        save_action.triggered.connect(self.save_project)
+        save_action.triggered.connect(lambda: self.save_project())
         toolbar.addAction(new_action)
         toolbar.addAction(open_action)
         toolbar.addAction(save_action)
@@ -237,6 +237,8 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self._stop_button)
 
         panel = QWidget()
+        panel.setMinimumWidth(360)
+        panel.setMaximumWidth(460)
         panel_layout = QVBoxLayout(panel)
         panel_layout.setContentsMargins(8, 8, 8, 8)
         project_group = QGroupBox("Project")
@@ -351,6 +353,8 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Position: {value} ticks")
 
     def _sync_track_controls(self) -> None:
+        if not hasattr(self, "_volume_spin") or not hasattr(self, "_pan_spin"):
+            return
         track = self._current_track()
         blocked_volume = self._volume_spin.blockSignals(True)
         blocked_pan = self._pan_spin.blockSignals(True)
@@ -630,6 +634,9 @@ class MainWindow(QMainWindow):
         self._refresh_info()
 
     def open_project(self, path: str | Path | None = None) -> Path | None:
+        # QAction.triggered(bool) supplies a checked flag; it is not a path.
+        if isinstance(path, bool):
+            path = None
         if path is None:
             selected, _ = QFileDialog.getOpenFileName(
                 self, "Open Siegfridi Project", "", "Siegfridi Project (*.siegfridi)"
@@ -650,6 +657,9 @@ class MainWindow(QMainWindow):
         return self.project_path
 
     def save_project(self, path: str | Path | None = None) -> Path | None:
+        # QAction.triggered(bool) supplies a checked flag; it is not a path.
+        if isinstance(path, bool):
+            path = None
         destination = Path(path) if path is not None else self.project_path
         if destination is None:
             selected, _ = QFileDialog.getSaveFileName(

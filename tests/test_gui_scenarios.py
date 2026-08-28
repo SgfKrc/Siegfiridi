@@ -118,6 +118,26 @@ def test_piano_roll_project_and_track_boundaries(qapp: QApplication) -> None:
     qapp.processEvents()
 
 
+def test_piano_roll_pitch_keyboard_is_read_only_and_labeled(qapp: QApplication) -> None:
+    project = Project(tracks=[Track("Lead")])
+    view = PianoRollView(project, CommandStack())
+    view.resize(800, 600)
+    view.show()
+    qapp.processEvents()
+
+    assert len(view._keyboard_keys) == 128
+    assert view._pitch_label(60) == "C4"
+    assert view._pitch_label(0) == "C-1"
+    assert set(view._keyboard_labels) == set(range(0, 128, 12))
+
+    keyboard_point = view.mapFromScene(QPointF(view.LEFT_MARGIN / 2, view._pitch_to_y(60) + 5))
+    QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=keyboard_point)
+    assert project.tracks[0].notes == []
+
+    view.close()
+    qapp.processEvents()
+
+
 def test_main_window_control_workflow(qapp: QApplication, monkeypatch, tmp_path: Path) -> None:
     project = Project(
         tempo_bpm=120,
@@ -230,6 +250,26 @@ def test_main_window_native_project_save_open_and_mix_sync(qapp: QApplication, t
     assert window.project.tracks[0].pan == 0.35
     assert window._volume_spin.value() == 0.45
     assert window._pan_spin.value() == 0.35
+    window.close()
+    qapp.processEvents()
+
+
+def test_action_triggered_boolean_does_not_become_project_path(
+    qapp: QApplication, monkeypatch, tmp_path: Path
+) -> None:
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    path = tmp_path / "action.siegfridi"
+    window.save_project(path)
+    monkeypatch.setattr(
+        "siegfridi.app.main_window.QFileDialog.getSaveFileName",
+        lambda *_args, **_kwargs: (str(path), ""),
+    )
+    assert window.save_project(False) == path
+    monkeypatch.setattr(
+        "siegfridi.app.main_window.QFileDialog.getOpenFileName",
+        lambda *_args, **_kwargs: (str(path), ""),
+    )
+    assert window.open_project(False) == path
     window.close()
     qapp.processEvents()
 

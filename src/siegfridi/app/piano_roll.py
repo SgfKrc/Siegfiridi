@@ -6,7 +6,12 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QKeyEvent, QPainter, QPen, QWheelEvent
-from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView
+from PySide6.QtWidgets import (
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsSimpleTextItem,
+    QGraphicsView,
+)
 
 from ..core.editing import (
     AddNoteCommand,
@@ -50,6 +55,11 @@ class PianoRollView(QGraphicsView):
     HANDLE_WIDTH = 8.0
     MIN_DURATION_TICK = 30
     LEFT_MARGIN = 48.0
+    BLACK_KEY_PITCH_CLASSES = frozenset((1, 3, 6, 8, 10))
+    WHITE_KEY_COLOR = QColor("#e6e7eb")
+    WHITE_KEY_BORDER = QColor("#9699a3")
+    BLACK_KEY_COLOR = QColor("#171922")
+    BLACK_KEY_BORDER = QColor("#08090d")
 
     def __init__(self, project: Project | None = None, command_stack: CommandStack | None = None) -> None:
         super().__init__()
@@ -58,12 +68,15 @@ class PianoRollView(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
+        self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.project = project or Project()
         self.command_stack = command_stack or CommandStack()
         self.track_index = 0
         self.selected_note_index: int | None = None
         self._interaction: _Interaction | None = None
+        self._keyboard_keys: dict[int, QGraphicsRectItem] = {}
+        self._keyboard_labels: dict[int, QGraphicsSimpleTextItem] = {}
         self.command_stack.add_listener(self.refresh)
         self.refresh()
 
@@ -110,6 +123,55 @@ class PianoRollView(QGraphicsView):
         colors = ("#d56a8b", "#6ab7d5", "#d5ad6a", "#9e7bd6", "#72c49a")
         return QColor(colors[self.track_index % len(colors)])
 
+    @staticmethod
+    def _pitch_label(pitch: int) -> str:
+        """Return the conventional MIDI note name (MIDI 60 is C4)."""
+        names = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+        return f"{names[pitch % 12]}{pitch // 12 - 1}"
+
+    def _draw_keyboard(self, scene: QGraphicsScene, height: float) -> None:
+        """Paint a read-only 128-key guide into the roll's left margin."""
+        self._keyboard_keys = {}
+        self._keyboard_labels = {}
+        white_pen = QPen(self.WHITE_KEY_BORDER, 0.7)
+        black_pen = QPen(self.BLACK_KEY_BORDER, 0.8)
+
+        # White keys form a continuous strip. Black keys are drawn afterwards so
+        # their overlap matches a physical piano keyboard.
+        for pitch in range(128):
+            if pitch % 12 in self.BLACK_KEY_PITCH_CLASSES:
+                continue
+            key = scene.addRect(0, self._pitch_to_y(pitch), self.LEFT_MARGIN, self.ROW_HEIGHT, white_pen)
+            key.setBrush(QBrush(self.WHITE_KEY_COLOR))
+            key.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self._keyboard_keys[pitch] = key
+
+            if pitch % 12 == 0:
+                label = scene.addSimpleText(self._pitch_label(pitch))
+                label.setBrush(QBrush(QColor("#252631")))
+                label.setPos(3, self._pitch_to_y(pitch) + 1)
+                label.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+                self._keyboard_labels[pitch] = label
+
+        black_width = self.LEFT_MARGIN * 0.62
+        black_height = self.ROW_HEIGHT * 0.68
+        for pitch in range(128):
+            if pitch % 12 not in self.BLACK_KEY_PITCH_CLASSES:
+                continue
+            key = scene.addRect(
+                0,
+                self._pitch_to_y(pitch) + (self.ROW_HEIGHT - black_height) / 2,
+                black_width,
+                black_height,
+                black_pen,
+            )
+            key.setBrush(QBrush(self.BLACK_KEY_COLOR))
+            key.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self._keyboard_keys[pitch] = key
+
+        separator = scene.addLine(self.LEFT_MARGIN, 0, self.LEFT_MARGIN, height, QPen(QColor("#555866"), 1.2))
+        separator.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+
     def refresh(self) -> None:
         scene = self.scene()
         scene.clear()
@@ -127,9 +189,11 @@ class PianoRollView(QGraphicsView):
         for pitch in range(128):
             y = self._pitch_to_y(pitch)
             pen = beat_pen if pitch % 12 in (0, 5) else dark_pen
-            scene.addLine(0, y, width, y, pen)
+            scene.addLine(self.LEFT_MARGIN, y, width, y, pen)
         for tick in range(0, max_tick + self.GRID_TICK, self.GRID_TICK):
             scene.addLine(self._tick_to_x(tick), 0, self._tick_to_x(tick), height, beat_pen)
+
+        self._draw_keyboard(scene, height)
 
         if not self.project.tracks:
             self.selected_note_index = None
@@ -171,6 +235,8 @@ class PianoRollView(QGraphicsView):
                 self.selected_note_index = None
             return
         if event.button() != Qt.MouseButton.LeftButton:
+            return
+        if scene_pos.x() < self.LEFT_MARGIN:
             return
         if item is None:
             tick = self._snap(self._x_to_tick(scene_pos.x()))

@@ -63,6 +63,52 @@ def test_native_project_validation_reports_bad_payload(payload, message) -> None
         project_from_dict(payload)
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        None,
+        {"format": "siegfridi-project", "schema_version": 1, "tracks": [{"name": "Lead"}]},
+        {"format": "siegfridi-project", "schema_version": 1, "ppq": 480, "tempo_bpm": 120, "tracks": [1]},
+        {
+            "format": "siegfridi-project",
+            "schema_version": 1,
+            "ppq": 480,
+            "tempo_bpm": 120,
+            "tracks": [{"name": "Lead", "notes": [{"start_tick": 0}]}],
+        },
+    ],
+)
+def test_native_project_validation_rejects_missing_or_malformed_nested_data(payload) -> None:
+    with pytest.raises(ProjectFileError):
+        project_from_dict(payload)
+
+
+def test_native_load_reports_missing_or_invalid_json(tmp_path) -> None:
+    with pytest.raises(ProjectFileError, match="could not read"):
+        load_siegfridi(tmp_path / "missing.siegfridi")
+    invalid = tmp_path / "invalid.siegfridi"
+    invalid.write_text("{not json", encoding="utf-8")
+    with pytest.raises(ProjectFileError, match="could not read"):
+        load_siegfridi(invalid)
+
+
+def test_native_save_restores_backup_when_atomic_write_fails(monkeypatch, tmp_path) -> None:
+    from siegfridi.core import project_io
+
+    path = tmp_path / "recover.siegfridi"
+    save_siegfridi(Project(tracks=[Track("Lead")]), path)
+    monkeypatch.setattr(project_io, "_atomic_write", lambda *_args: (_ for _ in ()).throw(OSError("disk full")))
+
+    with pytest.raises(OSError, match="disk full"):
+        save_siegfridi(Project(tempo_bpm=90, tracks=[Track("Lead")]), path)
+    assert load_siegfridi(path).tempo_bpm == 120.0
+
+
+def test_native_save_requires_project_suffix(tmp_path) -> None:
+    with pytest.raises(ProjectFileError, match="suffix"):
+        save_siegfridi(Project(), tmp_path / "song.json")
+
+
 def test_native_file_is_readable_json(tmp_path) -> None:
     path = save_siegfridi(Project(tracks=[Track("Lead")]), tmp_path / "song.siegfridi")
     payload = json.loads(path.read_text(encoding="utf-8"))

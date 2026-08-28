@@ -1,0 +1,10 @@
+Source: scripts/build-oriental-pack.py
+Generated asset: oriental-project-v0.1.sf2
+Generated on: 2026-08-28
+Generation is deterministic; rebuild with:
+
+  .venv\Scripts\python.exe scripts\build-oriental-pack.py
+
+Style scope: original brass/FM/chip/breathy-wind/percussion palette inspired by
+high-density Oriental Project arrangement traits. This is a style
+reconstruction, not a Touhou, ZUNpet, Roland, or game sample reproduction.

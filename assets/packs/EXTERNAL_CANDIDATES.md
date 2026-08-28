@@ -25,6 +25,14 @@
 | FreePats Ocarina 2024-10-02 | [FreePats 页面](https://freepats.zenvoid.org/Wind/ocarina.html) | FreePats 社区 | **CC0-1.0** | 已下载并实测 FluidSynth 渲染；清单/哈希/CC0 文本齐备 | 保留录音者署名、归档和 SF2 哈希 | 已纳入本地候选清单 |
 | SP Bamboo Flute | [GitHub 仓库](https://github.com/NeoSoundFonts/SP-Bamboo-Flute) | NeoSoundFonts | **CC0-1.0** | 已固定提交并逐文件记录哈希；SFZ/WAV 源素材 | 转换后的 SF2 映射、循环、力度和新哈希 | 已获取为制作源，尚不能直接渲染 |
 
+## 已完成的项目原创包
+
+| 清单 | 许可 | 内容 | 状态 |
+| --- | --- | --- | --- |
+| [`oriental-project-v01.json`](oriental-project-v01.json) | CC0-1.0 | `scripts/build-oriental-pack.py` 确定性生成的原创铜管攻击、FM/芯片主音、呼吸风笛和芯片打击乐 | 可直接 FluidSynth 渲染；不含 Touhou、ZUNpet、Roland、游戏或第三方录音 |
+
+该项目原创包用于重构东方风格的编曲特征，而不是复制 ZUNpet 或任何原作音源。生成后的 SF2 哈希、来源和授权文本分别记录在清单、`OrientalProjectPalette.SOURCE.txt` 和 `OrientalProjectPalette.CC0.txt`。
+
 ## 已搜集的社区东方音色包（2026-08-28 调研）
 
 ### 可自由再分发（许可清晰，可本地导入并考虑随包署名分发）

@@ -39,6 +39,18 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Install the complete build environment with: python -m pip install -e ".[all]"'
 }
 
+$OrientalSoundFont = Join-Path $Root 'assets\packs\oriental-project-v0.1.sf2'
+$OrientalManifest = Join-Path $Root 'assets\packs\oriental-project-v01.json'
+Write-Host 'Generating the original CC0 Oriental Project SoundFont...'
+& $Python (Join-Path $Root 'scripts\build-oriental-pack.py') --output $OrientalSoundFont --manifest $OrientalManifest
+if ($LASTEXITCODE -ne 0) { throw 'Oriental Project SoundFont generation failed' }
+
+$GothicSoundFont = Join-Path $Root 'assets\packs\dark-gothic-v0.1.sf2'
+$GothicManifest = Join-Path $Root 'assets\packs\dark-gothic-v01.json'
+Write-Host 'Generating the original CC0 Dark Gothic SoundFont...'
+& $Python (Join-Path $Root 'scripts\build-gothic-pack.py') --output $GothicSoundFont --manifest $GothicManifest
+if ($LASTEXITCODE -ne 0) { throw 'Dark Gothic SoundFont generation failed' }
+
 $Spec = Join-Path $Root 'packaging\siegfridi.spec'
 & $Python -m PyInstaller --noconfirm --clean $Spec
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed' }

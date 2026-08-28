@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -15,10 +16,24 @@ runtime_root = Path(os.environ.get("SIEGFRIDI_FLUIDSYNTH_DIR", "C:/tools/fluidsy
 
 pack_root = project_root / "assets" / "packs"
 datas = []
-# Only top-level runtime packs and their provenance are distributable inputs.
-# Source libraries under assets/packs/sources are kept for authoring and must
-# not be pulled into the application bundle accidentally.
-for pattern in ("*.sf2", "*.sf3", "*.json", "*.COPYING", "*.CC0.txt", "*.SOURCE.txt", "README.md"):
+# Only manifests explicitly marked redistributable contribute runtime audio.
+# Community reference packs remain available in a checkout for local study,
+# but their SF2 files and manifests must never enter a release bundle.
+for manifest_path in pack_root.glob("*.json"):
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        continue
+    if not isinstance(payload, dict) or not payload.get("soundfont"):
+        continue
+    if payload.get("distribution", "redistributable") != "redistributable":
+        continue
+    soundfont_path = pack_root / str(payload["soundfont"])
+    if not soundfont_path.is_file():
+        continue
+    datas.append((str(manifest_path), "assets/packs"))
+    datas.append((str(soundfont_path), "assets/packs"))
+for pattern in ("*.COPYING", "*.CC0.txt", "*.SOURCE.txt", "README.md"):
     datas.extend((str(path), "assets/packs") for path in pack_root.glob(pattern))
 datas.append((str(project_root / "assets" / "presets"), "assets/presets"))
 

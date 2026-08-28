@@ -1,0 +1,15 @@
+Siegfridi Dark Gothic Palette v0.1 source record
+
+- Generator: scripts/build-gothic-pack.py
+- Source repository: https://github.com/SgfKrc/Siegfiridi
+- Generation: deterministic procedural synthesis; no third-party recordings
+- Sample rate: 22050 Hz, signed 16-bit mono source samples
+- Roles: cathedral organ, dark choir, funeral bell, low strings, plucked relic,
+  gothic percussion
+- Generated file: dark-gothic-v0.1.sf2
+- Manifest: dark-gothic-v01.json
+- License: CC0-1.0 (see DarkGothicPalette.CC0.txt)
+
+The generated file is intentionally small and is a style-routing prototype.
+It does not claim to reproduce any particular Touhou, Castlevania, Blasphemous,
+BLACK SOULS, RPG Maker, or other commercial soundtrack or sample library.

@@ -32,3 +32,16 @@ Current asset records:
 - FreePats Ocarina 2024-10-02: CC0-1.0, runtime SF2 candidate; see
   `assets/packs/freepats-ocarina.json`, `assets/packs/FreePats-Ocarina.CC0.txt`
   and `assets/packs/FreePats-Ocarina.SOURCE.txt`.
+- Siegfridi Oriental Project Palette 0.1.0: CC0-1.0 original procedural
+  project asset; see `assets/packs/oriental-project-v01.json`,
+  `assets/packs/OrientalProjectPalette.CC0.txt` and
+  `assets/packs/OrientalProjectPalette.SOURCE.txt`.
+- Siegfridi Dark Gothic Palette 0.1.0: CC0-1.0 original procedural project
+  asset; see `assets/packs/dark-gothic-v01.json`,
+  `assets/packs/DarkGothicPalette.CC0.txt` and
+  `assets/packs/DarkGothicPalette.SOURCE.txt`.
+
+The locally cached THFont, NeoTHFont, ZUNpet, PC-98 and SRX reference packs
+are marked `local-study-only` and are intentionally excluded from PyInstaller
+data collection. They remain governed by their individual NOTICE files and
+are not project distribution assets.

@@ -1,0 +1,12 @@
+Siegfridi Dark Gothic Palette v0.1
+
+Copyright (c) 2026 SgfKrc
+
+The procedural waveform source and the generated audio data in this palette
+are dedicated to the public domain under the Creative Commons CC0 1.0
+Universal dedication. To the extent that CC0 cannot be applied, the author
+grants a royalty-free, worldwide, perpetual license to use, reproduce,
+modify, adapt, and redistribute the work for any purpose.
+
+Full legal text:
+https://creativecommons.org/publicdomain/zero/1.0/legalcode

@@ -12,6 +12,7 @@ from siegfridi.synthesis import (
     SynthesisError,
     find_fluidsynth,
     native_fluidsynth_available,
+    render_manifest,
     render_wav,
 )
 
@@ -63,6 +64,79 @@ def test_fluidr3_gm_asset_manifest_is_present_and_verified() -> None:
     assert {profile.id for profile in manifest.profiles} >= {"cathedral-organ", "lead-synth"}
 
 
+def test_oriental_project_asset_manifest_is_original_and_verified() -> None:
+    manifest_path = Path("assets/packs/oriental-project-v01.json")
+    soundfont = Path("assets/packs/oriental-project-v0.1.sf2")
+    if not manifest_path.is_file() or not soundfont.is_file():
+        pytest.skip("generated Oriental Project asset is unavailable")
+    manifest = SoundPackManifest.load(manifest_path)
+    assert manifest.verify(manifest_path) == soundfont.resolve()
+    assert manifest.license == "CC0-1.0"
+    assert manifest.redistributable is True
+    assert manifest.profiles[0].id == "zunpet-trumpet"
+    assert {profile.id for profile in manifest.profiles} >= {"fm-lead", "folk-wind", "sampled-drums"}
+
+
+def test_oriental_project_manifest_renders_with_profile_routing(monkeypatch, tmp_path) -> None:
+    manifest_path = Path("assets/packs/oriental-project-v01.json")
+    soundfont = Path("assets/packs/oriental-project-v0.1.sf2")
+    if not manifest_path.is_file() or not soundfont.is_file() or not native_fluidsynth_available():
+        pytest.skip("generated Oriental Project asset or native FluidSynth is unavailable")
+    monkeypatch.setattr("siegfridi.synthesis.render.find_fluidsynth", lambda _executable=None: None)
+    project = Project(
+        tempo_bpm=150,
+        tracks=[
+            Track("Brass", sound_profile_id="zunpet-trumpet", notes=[Note(0, 480, 72, 110)]),
+            Track("FM", sound_profile_id="fm-lead", notes=[Note(0, 480, 60, 90)]),
+        ],
+    )
+    output = render_manifest(project, manifest_path, tmp_path / "oriental.wav", sample_rate=8000)
+    with wave.open(str(output), "rb") as wav_file:
+        samples = array.array("h")
+        samples.frombytes(wav_file.readframes(wav_file.getnframes()))
+        assert wav_file.getnchannels() == 2
+        assert wav_file.getframerate() == 8000
+    assert max(abs(value) for value in samples) > 100
+
+
+def test_dark_gothic_asset_manifest_is_original_and_renders_all_roles(monkeypatch, tmp_path) -> None:
+    manifest_path = Path("assets/packs/dark-gothic-v01.json")
+    soundfont = Path("assets/packs/dark-gothic-v0.1.sf2")
+    if not manifest_path.is_file() or not soundfont.is_file() or not native_fluidsynth_available():
+        pytest.skip("generated Dark Gothic asset or native FluidSynth is unavailable")
+    manifest = SoundPackManifest.load(manifest_path)
+    assert manifest.verify(manifest_path) == soundfont.resolve()
+    assert manifest.license == "CC0-1.0"
+    assert manifest.redistributable is True
+    assert {profile.id for profile in manifest.profiles} >= {
+        "cathedral-organ",
+        "dark-choir",
+        "bell",
+        "bowed-bass",
+        "plucked-relic",
+        "gothic-percussion",
+    }
+    monkeypatch.setattr("siegfridi.synthesis.render.find_fluidsynth", lambda _executable=None: None)
+    project = Project(
+        tempo_bpm=100,
+        tracks=[
+            Track("Organ", sound_profile_id="cathedral-organ", notes=[Note(0, 480, 48, 105)]),
+            Track("Choir", sound_profile_id="dark-choir", notes=[Note(0, 480, 60, 92)]),
+            Track("Bell", sound_profile_id="bell", notes=[Note(0, 480, 72, 110)]),
+            Track("Strings", sound_profile_id="bowed-bass", notes=[Note(0, 480, 43, 88)]),
+            Track("Pluck", sound_profile_id="plucked-relic", notes=[Note(0, 480, 67, 100)]),
+            Track("Percussion", sound_profile_id="gothic-percussion", notes=[Note(0, 240, 36, 115)]),
+        ],
+    )
+    output = render_manifest(project, manifest_path, tmp_path / "gothic.wav", sample_rate=8000)
+    with wave.open(str(output), "rb") as wav_file:
+        samples = array.array("h")
+        samples.frombytes(wav_file.readframes(wav_file.getnframes()))
+        assert wav_file.getnchannels() == 2
+        assert wav_file.getframerate() == 8000
+    assert max(abs(value) for value in samples) > 100
+
+
 def test_freepats_ocarina_asset_manifest_is_present_and_verified() -> None:
     manifest_path = Path("assets/packs/freepats-ocarina.json")
     soundfont = Path("assets/packs/Ocarina-20241002.sf2")
@@ -108,10 +182,56 @@ def test_render_reports_missing_fluidsynth_without_touching_project(tmp_path) ->
     assert not output.exists()
 
 
+def test_render_wav_validates_inputs(tmp_path) -> None:
+    project = Project(tracks=[Track(name="Lead", notes=[Note(0, 480, 60)])])
+    soundfont = tmp_path / "sf.sf2"
+    soundfont.write_bytes(b"fake")
+
+    with pytest.raises(ValueError, match="sample_rate must be positive"):
+        render_wav(project, soundfont, tmp_path / "out.wav", sample_rate=0)
+    with pytest.raises(FileNotFoundError):
+        render_wav(project, tmp_path / "missing.sf2", tmp_path / "out.wav")
+
+
+def test_render_wav_reports_cli_failure_and_missing_output(monkeypatch, tmp_path) -> None:
+    project = Project(tracks=[Track(name="Lead", notes=[Note(0, 480, 60)])])
+    soundfont = tmp_path / "sf.sf2"
+    soundfont.write_bytes(b"fake")
+    executable = tmp_path / "fluidsynth.exe"
+    executable.write_bytes(b"MZ")
+
+
+    class _Failure:
+        returncode = 1
+        stderr = "boom: bad soundfont"
+        stdout = ""
+
+    monkeypatch.setattr(
+        "siegfridi.synthesis.render.subprocess.run", lambda *_a, **_k: _Failure()
+    )
+    with pytest.raises(SynthesisError, match="FluidSynth rendering failed"):
+        render_wav(project, soundfont, tmp_path / "out.wav", executable=executable)
+
+    class _NoOutput:
+        returncode = 0
+        stderr = ""
+        stdout = ""
+
+    monkeypatch.setattr(
+        "siegfridi.synthesis.render.subprocess.run", lambda *_a, **_k: _NoOutput()
+    )
+    with pytest.raises(SynthesisError, match="did not create a WAV"):
+        render_wav(project, soundfont, tmp_path / "out2.wav", executable=executable)
+
+
 def test_native_binding_renders_audible_wav_when_cli_is_unavailable(monkeypatch, tmp_path) -> None:
-    soundfont = Path(".venv/Lib/site-packages/pretty_midi/TimGM6mb.sf2")
-    if not soundfont.is_file() or not native_fluidsynth_available():
-        pytest.skip("native FluidSynth or the development SoundFont is unavailable")
+    candidates = (
+        Path("assets/packs/FluidR3_GM.sf2"),
+        Path(".venv/Lib/site-packages/pretty_midi/TimGM6mb.sf2"),
+    )
+    soundfont = next((path for path in candidates if path.is_file()), None)
+    if soundfont is None or not native_fluidsynth_available():
+        pytest.skip("native FluidSynth or a development SoundFont is unavailable")
     monkeypatch.setattr("siegfridi.synthesis.render.find_fluidsynth", lambda _executable=None: None)
     project = Project(tracks=[Track(name="Lead", notes=[Note(0, 480, 60)])])
     output = render_wav(project, soundfont, tmp_path / "native.wav", sample_rate=8000)

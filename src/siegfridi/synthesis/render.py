@@ -15,6 +15,7 @@ from ..core.models import Project
 from ..midi.files import save_project
 from ..playback.player import scheduled_events, tick_to_seconds
 from ..sound.packs import SoundPackManifest
+from ..sound.profiles import SoundProfile
 
 
 class SynthesisError(RuntimeError):
@@ -72,6 +73,7 @@ def _render_wav_native(
     soundfont_path: Path,
     destination: Path,
     sample_rate: int,
+    profiles: dict[str, SoundProfile] | None = None,
 ) -> Path:
     """Render scheduled note events through the pyFluidSynth audio pull API."""
     module = _load_native_fluidsynth()
@@ -99,10 +101,22 @@ def _render_wav_native(
         chunks: list[np.ndarray] = []
         cursor = 0
         events = scheduled_events(project)
-        # Until track-level SoundProfile routing is added, use the GM piano
-        # preset as a deterministic fallback for every channel in use.
-        for channel in {event.message.channel for event in events}:
-            synth.program_select(channel, soundfont_id, 0, 0)
+        configured_channels: set[int] = set()
+        for event in events:
+            channel = event.message.channel
+            if channel in configured_channels:
+                continue
+            track = project.tracks[event.track_index]
+            profile = profiles.get(track.sound_profile_id) if profiles and track.sound_profile_id else None
+            if profile is not None:
+                synth.program_select(channel, soundfont_id, profile.bank, profile.program)
+            else:
+                synth.program_select(channel, soundfont_id, 0, 0)
+            if track.volume != 1.0:
+                synth.cc(channel, 7, round(track.volume * 127))
+            if track.pan != 0.0:
+                synth.cc(channel, 10, round((track.pan + 1.0) * 63.5))
+            configured_channels.add(channel)
         for event in events:
             frame = round(tick_to_seconds(event.tick, project.ppq, project.tempo_bpm) * sample_rate)
             if frame > cursor:
@@ -148,6 +162,7 @@ def render_wav(
     *,
     executable: str | Path | None = None,
     sample_rate: int = 44100,
+    profiles: dict[str, SoundProfile] | None = None,
 ) -> Path:
     """Render a project to WAV, preferring CLI and falling back to pyFluidSynth."""
     if sample_rate <= 0:
@@ -161,10 +176,10 @@ def render_wav(
     if fluidsynth is None:
         if executable is not None:
             raise SynthesisError("FluidSynth executable was not found; install FluidSynth and retry")
-        return _render_wav_native(project, soundfont_path, destination, sample_rate)
+        return _render_wav_native(project, soundfont_path, destination, sample_rate, profiles)
     with tempfile.TemporaryDirectory(prefix="siegfridi-render-") as directory:
         midi_path = Path(directory) / "project.mid"
-        save_project(project, midi_path)
+        save_project(project, midi_path, profiles)
         command = [
             fluidsynth,
             "-ni",
@@ -201,4 +216,5 @@ def render_manifest(
         output_path,
         executable=executable,
         sample_rate=sample_rate,
+        profiles={profile.id: profile for profile in manifest.profiles},
     )

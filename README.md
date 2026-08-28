@@ -6,7 +6,7 @@ Siegfridi 是一个 Python-first 的 Windows MIDI 编曲工具，优先服务定
 
 ## 当前状态
 
-P3 音频转录管线已可实际运行：环境固定为 `numpy<2`、TensorFlow 2.14、Basic Pitch 0.4，并已用合成三音符 WAV 实测生成 3 个候选音符。P4 已接入 SoundFont 清单/哈希校验、FluidSynth CLI 渲染和 pyFluidSynth 原生绑定兜底；当前环境已用 `TimGM6mb.sf2` 实测生成有声 WAV。
+P3 音频转录管线已可实际运行：环境固定为 `numpy<2`、TensorFlow 2.14、Basic Pitch 0.4，并已用合成三音符 WAV 实测生成 3 个候选音符。P4 已接入 SoundFont 清单/哈希校验、FluidSynth CLI 渲染和 pyFluidSynth 原生绑定兜底，并登记了 MIT 许可的 FluidR3_GM 3.1 GM 回退包；同时已获取一份 CC0-1.0 的竹笛 SFZ/WAV 源素材，但尚未转换为 FluidSynth 可用的项目专用 SF2。P5 已提供 PyInstaller Windows onedir 构建，自动收集 FluidSynth 原生运行文件并生成包哈希清单。
 
 ## 开发环境
 
@@ -29,7 +29,60 @@ python -m siegfridi --version
 python -m siegfridi
 ```
 
+开发态查看前端（无需打包）：
+
+```powershell
+.\scripts\run-dev.ps1
+# 无桌面环境或用于烟测：
+.\scripts\run-dev.ps1 -Offscreen
+```
+
+窗口中的钢琴卷帘支持添加、移动、缩放和删除音符；左侧可切换风格、节拍和本地运行时 SoundFont，并将当前工程试听渲染到 `.siegfridi/preview.wav`。
+
 音频、转录和合成依赖按需安装：`.[audio]`、`.[transcription]`、`.[synthesis]`。发布版会通过 PyInstaller 生成 Windows 安装包，并附第三方许可证、模型和音色包来源清单。
+
+构建 Windows 便携包（需要已安装 `.[all]`）：
+
+```powershell
+.\scripts\build.ps1
+# 需要清理旧 build/dist 时：
+.\scripts\build.ps1 -Clean
+```
+
+产物位于 `dist/Siegfridi/`，启动冒烟命令为 `dist/Siegfridi/Siegfridi.exe --version`。构建脚本会从 `SIEGFRIDI_FLUIDSYNTH_DIR` 或 `C:\tools\fluidsynth\bin` 收集 CLI/DLL；SoundFont、模型和录音素材不会因构建自动取得授权，必须通过各自清单导入。
+
+获取已核验的 GM 回退音色（约 148 MB，本地文件按 `.gitignore` 排除）：
+
+```powershell
+.\scripts\fetch-soundfont.ps1
+```
+
+该脚本固定 FluidR3_GM v3.1 的下载地址和 SHA-256，并保存 MIT/COPYING 与来源说明；它只提供 GM 基线，不替代项目专用东方 Project / 黑暗哥特音色包。
+
+获取已核验的 CC0 东方竹笛源素材（约 7 MB，SFZ/WAV，当前仅作制作源素材）：
+
+```powershell
+.\scripts\fetch-oriental-source.ps1
+```
+
+该脚本固定 [SP Bamboo Flute](https://github.com/NeoSoundFonts/SP-Bamboo-Flute) 的提交版本和归档 SHA-256；源包的 41 个文件哈希、许可证和“尚不可直接渲染”状态记录在 `assets/packs/sp-bamboo-flute-source.json`。转换为 SF2 后必须生成新的运行时清单和哈希，不能沿用源归档哈希。
+
+获取已核验的 CC0 FreePats Ocarina SF2（约 3.2 MB，本地文件按 `.gitignore` 排除）：
+
+```powershell
+python -m pip install -e ".[assets]"
+.\scripts\fetch-freepats-ocarina.ps1
+```
+
+脚本固定 2024-10-02 归档和 SF2 SHA-256，并复制 CC0 文本与录音来源说明；该包可以直接被 FluidSynth 加载，但只提供单一风笛音色，不能替代项目专用东方/黑暗哥特音色包。
+
+### 东方风格音源边界
+
+东方的辨识度不等于某一件民族乐器，常见讨论会涉及 ZUNpet（Romantic Tp）、FM/芯片音色、铜管和密集的旋律编排。社区的 `THFont`/`NeoTHFont` 等包可以作为试听参考，但当前不自动下载：官方指南要求标明二次创作属性，并禁止公开原作游戏素材；旧的 ZUN 使用条件也要求内部数据不得再分发或修改。[官方指南](https://touhou-project.news/guideline/) 和 [历史条件转录](https://thbwiki.cc/二次创作以及使用规则/乐曲二次使用条件) 均不能替代音色包本身的第三方授权。
+
+因此项目采用两条路线：默认使用 CC0/MIT/原创素材制作“ZUN 风格特征”音色，不复制原作样本；用户若自行取得社区音色，只能作为本地外部导入，并在发布前完成逐文件授权和哈希审查。
+
+待自行核验的社区候选已整理在 [`assets/packs/EXTERNAL_CANDIDATES.md`](assets/packs/EXTERNAL_CANDIDATES.md)，其中包含 THFont、NeoTHFont、ZUNpet/ Romantic Tp 复刻包和相关资料索引，以及逐项核验表。该文档中的链接是研究入口，不表示项目已取得这些包的再分发权。
 
 ## 目录
 
@@ -43,6 +96,7 @@ src/siegfridi/
   playback/       # FluidSynth 和 MIDI 时钟
   sound/          # SoundProfile、风格模板、音色包清单
   workers/        # 可取消的工作进程入口
+packaging/        # PyInstaller spec、原生 DLL hook 和第三方声明
 tests/
 assets/packs/     # 已授权或自制的音色包（大文件不入库）
 assets/presets/   # 风格模板和示例工程

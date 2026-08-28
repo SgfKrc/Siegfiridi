@@ -1,0 +1,19 @@
+{
+  "id": "pc98-soundfont",
+  "name": "PC-98 Soundfont (YM2608)",
+  "version": "community-2018-07-20",
+  "soundfont": "pc98_ym2608.sf2",
+  "sha256": "cebff560a5315f9b725a3755009f4eb6d51526dfc096ca6bad603d96d2543837",
+  "license": "CC BY 4.0",
+  "source_url": "https://musical-artifacts.com/artifacts/589",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+  "attribution": "PC-98 Soundfont by kakuzatoo, uploaded on Musical Artifacts #589 (2018-07-20), CC BY 4.0.",
+  "category": "touhou-reference",
+  "distribution": "local-study-only",
+  "notes": "二创参考音色; 仅个人学习使用, 禁止商业使用.",
+  "profiles": [
+    {"id": "pc98-lead", "name": "PC-98 FM lead", "program": 80},
+    {"id": "pc98-bass", "name": "PC-98 FM bass", "program": 33},
+    {"id": "pc98-drum", "name": "PC-98 rhythm", "program": 0}
+  ]
+}

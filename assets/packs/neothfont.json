@@ -1,0 +1,22 @@
+{
+  "id": "neothfont",
+  "name": "NeoTHFont",
+  "version": "community-2025-07-20",
+  "soundfont": "neothfont.sf2",
+  "sha256": "c49d2a50d54796172f0cdd0bab9cc1e264a5477124ba9e60dba40f957d3adf7b",
+  "license": "WTFPL 2.0",
+  "source_url": "https://musical-artifacts.com/artifacts/6614",
+  "license_url": "http://www.wtfpl.net/about/",
+  "attribution": "NeoTHFont, uploaded anonymously on Musical Artifacts #6614 (2025-07-20), WTFPL 2.0.",
+  "category": "touhou-reference",
+  "distribution": "local-study-only",
+  "notes": "二创参考音色(THFont 重制改进版); 仅个人学习使用, 禁止商业使用; 未核验样本构成. 归档 NeoTHFont.tar.xz SHA-256 a228824ba7e07586fbc03001900079f1a6453d9b0b0650b14a8df33de2f35fc4.",
+  "profiles": [
+    {"id": "zunpet-trumpet", "name": "Romantic Tp", "program": 56},
+    {"id": "lead-synth", "name": "GM Lead (square)", "program": 80},
+    {"id": "electric-bass", "name": "GM Electric Bass", "program": 33},
+    {"id": "folk-wind", "name": "GM Flute", "program": 73},
+    {"id": "cathedral-organ", "name": "GM Church Organ", "program": 19},
+    {"id": "sampled-drums", "name": "GM Standard Drums", "program": 0}
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "thfont",
+  "name": "Touhou Soundfont (THFont)",
+  "version": "community-2016-11-23",
+  "soundfont": "Touhou.sf2",
+  "sha256": "c05372f76164aac916f9913550fab9d30d650cf205f000da27513ab98054b419",
+  "license": "CC BY 4.0",
+  "source_url": "https://musical-artifacts.com/artifacts/433",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+  "attribution": "Touhou Soundfont, uploaded on Musical Artifacts #433 (2016-11-23), CC BY 4.0; original soundfont author unknown.",
+  "category": "touhou-reference",
+  "distribution": "local-study-only",
+  "notes": "二创参考音色; 仅个人学习使用, 禁止商业使用; 内含 Romantic Tp/SD90 条目样本来源有社区争议.",
+  "profiles": [
+    {"id": "zunpet-trumpet", "name": "Romantic Tp", "program": 56},
+    {"id": "lead-synth", "name": "GM Lead 1 (square)", "program": 80},
+    {"id": "electric-bass", "name": "GM Electric Bass (finger)", "program": 33},
+    {"id": "folk-wind", "name": "GM Flute", "program": 73},
+    {"id": "sampled-drums", "name": "GM Standard Drums", "program": 0}
+  ]
+}

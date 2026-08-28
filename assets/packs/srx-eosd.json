@@ -1,0 +1,17 @@
+{
+  "id": "srx-eosd-romantic-tp",
+  "name": "Touhou Roland SRX EoSD Romantic Trumpet",
+  "version": "community-2021-10-16",
+  "soundfont": "SRX_EoSD_Romantic_Tp.sf2",
+  "sha256": "123daa313721f8573c4335b582d7f7cf9ac253eaa844bee683ef73817ed7e2a3",
+  "license": "WTFPL 2.0",
+  "source_url": "https://musical-artifacts.com/artifacts/1783",
+  "license_url": "http://www.wtfpl.net/about/",
+  "attribution": "Touhou Roland SRX EoSD Romantic Trumpet by Palto, DrKoupop, Musical Artifacts #1783 (2021-10-16), WTFPL 2.0.",
+  "category": "touhou-reference",
+  "distribution": "local-study-only",
+  "notes": "二创参考音色; 仅个人学习使用, 禁止商业使用; 未核验样本来源, 名称含 SRX, 不排除 Roland 采样.",
+  "profiles": [
+    {"id": "zunpet-trumpet", "name": "Romantic Tp (SRX)", "program": 56}
+  ]
+}

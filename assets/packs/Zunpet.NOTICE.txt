@@ -1,0 +1,17 @@
+# Actually the zunpet (SD-90 Romantic Tp) — 出处与许可
+
+- 页面: https://musical-artifacts.com/artifacts/2527
+- 作者: "roland blah blah"; 上传 2022-12-07
+- 格式: SF2(`57._Romantic_tp.sf2`, 单音色)
+- 许可声明: **WTFPL 2.0**(可自由再分发)
+  - 全文: http://www.wtfpl.net/about/
+- 下载来源: 经 archive.org Wayback Machine 快照 20221211043034 获取
+  - `http://web.archive.org/web/20221211043034id_/https://musical-artifacts.com/artifacts/2527/57._Romantic_tp.sf2`
+- 本机 SHA-256: `53ffac1aedcdac59047480d851d439d37865de11aa2a25eceed5e14467af0fcf`
+- 大小: 77,980,272 字节
+
+## 用途与边界
+
+- 本项目用途: ZUNpet(SD-90 Romantic Tp)听感参考, 本地试听/渲染(二创参考)。
+- ⚠️ 上传者自称是真实 SD-90 采样; 若确为 Roland 硬件采样, Roland 权利仍可能覆盖。
+- 使用要求: 注明东方 Project 二次创作、本发行仅限个人学习使用, 禁止商业使用。仅本地导入, 不建议随发行包再分发。

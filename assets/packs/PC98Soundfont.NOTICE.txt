@@ -1,0 +1,16 @@
+# PC-98 Soundfont — 出处与许可
+
+- 页面: https://musical-artifacts.com/artifacts/589
+- 上传: 2018-07-20,制作作者 kakuzatoo(页面署名 Danielle Pluzsik)
+- 格式: SF2(`pc98_ym2608.sf2`)
+- 许可声明: **CC BY 4.0**(可署名再分发)
+  - 全文: https://creativecommons.org/licenses/by/4.0/legalcode
+- 下载来源: 经 archive.org Wayback Machine 快照 20190224184240 获取
+  - `http://web.archive.org/web/20190224184240id_/https://musical-artifacts.com/artifacts/589/pc98_ym2608.sf2`
+- 本机 SHA-256: `cebff560a5315f9b725a3755009f4eb6d51526dfc096ca6bad603d96d2543837`
+- 大小: 30,591,070 字节
+
+## 用途与边界
+
+- 本项目用途: PC-98(YM2608)时代东方 TH01–05 风味的本地试听/渲染参考(二创参考)。
+- 使用要求: 保留作者署名、注明东方 Project 二次创作、本发行仅限个人学习使用, 禁止商业使用。

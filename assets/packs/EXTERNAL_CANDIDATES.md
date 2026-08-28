@@ -38,6 +38,20 @@
 | NeoTHFont #6614 | 匿名 / 2025-07-20 | WTFPL 2.0 | [MediaFire（已实测在线）](https://www.mediafire.com/file/jx88lp0akwb0nep/NeoTHFont.tar.xz/file) + [axfc 镜像](https://www.axfc.net/u/4101992) | 281.77 MB，THFont 重制版 |
 | Altosoft Vib #1360 | — | CC BY 3.0 | MA 站内 | zun 标签下的可再分发条目 |
 
+### 下载状态（2026-08-28）
+
+| 清单 json | 本地 SF2 | SHA-256 | 加载验证 | 入库状态 |
+| --- | --- | --- | --- | --- |
+| [thfont.json](thfont.json) | `Touhou.sf2`（261 MB） | `c05372f7…` | ✅ pyfluidsynth | 本地已入库（MA 页面直链被 Cloudflare 403，经 Wayback 20260605 快照获取） |
+| [pc98-soundfont.json](pc98-soundfont.json) | `pc98_ym2608.sf2`（30.6 MB） | `cebff560…` | ✅ | 本地已入库（经 Wayback 20190224 快照） |
+| [srx-eosd.json](srx-eosd.json) | `SRX_EoSD_Romantic_Tp.sf2`（121 MB） | `123daa31…` | ✅ | 本地已入库（经 Wayback 20211018 快照） |
+| [zunpet-sd90.json](zunpet-sd90.json) | `57_Romantic_tp.sf2`（78 MB） | `53ffac1a…` | ✅ | 本地已入库（经 Wayback 20221211 快照） |
+| [neothfont.json](neothfont.json) | `neothfont.sf2`（492 MB，归档 `NeoTHFont.tar.xz` 295 MB） | sf2 `c49d2a50…` / 归档 `a228824b…` | ✅ | 本地已入库（MediaFire 直链经代理实测在线） |
+
+- 各清单均含 `category: touhou-reference`、`distribution: local-study-only`,NOTICE 文本注明“二创参考、仅个人学习使用、禁止商业使用”;SF2 大文件由 `.gitignore` 排除,不入 git。
+- Altosoft Vib #1360:Wayback 无该条目下载快照(CDX 无 sf2 记录),未获取,保持候选状态。
+- **UltimateSoundfontModForTouhou**:2026-08-28 复核仓库树共 623 条目,**0 个 SoundFont 文件**(472 AAC + 107 WAV + 17 sfk,均为东方 BGM 录音),无 LICENSE、含游戏原声 → 按“内容是否丰富”标准(需为音色包)判定**不入库、不下载**。
+
 ### 仅个人使用 / 不可再分发（Roland、Edirol 或游戏数据灰区，只能本地试听）
 
 | 条目 | 作者/时间 | 页面许可 | 下载 | 风险 |

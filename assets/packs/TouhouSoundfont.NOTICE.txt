@@ -1,0 +1,17 @@
+# Touhou Soundfont (THFont) — 出处与许可
+
+- 页面: https://musical-artifacts.com/artifacts/433
+- 上传: 2016-11-23(2024-05 最后更新),作者署名 "Team Shanghai Alice (game), unknown author of soundfont"
+- 格式: SF2(单文件 Touhou.sf2)
+- 许可声明: **CC BY 4.0**(可署名再分发)
+  - 全文: https://creativecommons.org/licenses/by/4.0/legalcode
+- 下载来源: 经 archive.org Wayback Machine 快照 20260605034229 获取
+  - `http://web.archive.org/web/20260605034229id_/https://musical-artifacts.com/artifacts/433/Touhou.sf2`
+- 本机 SHA-256: `c05372f76164aac916f9913550fab9d30d650cf205f000da27513ab98054b419`
+- 大小: 261,192,820 字节
+
+## 用途与边界
+
+- 本项目用途: 东方 Project 风格编曲的本地试听/渲染参考音色(二创参考)。
+- 未核验项: 页面未注明原始提取出处; 内含 Romantic Tp 与 SD-90 鼓组条目, 其样本来源存在社区争议, 不排除源自 Roland 硬件/商业音源。
+- 使用要求: 保留作者署名、注明东方 Project 二次创作、本发行仅限个人学习使用, 禁止商业使用与再次分发(超出 CC BY 4.0 明文授权范围的部分)。

@@ -1,0 +1,17 @@
+{
+  "id": "zunpet-sd90",
+  "name": "Actually the zunpet (SD-90 Romantic Tp)",
+  "version": "community-2022-12-07",
+  "soundfont": "57_Romantic_tp.sf2",
+  "sha256": "53ffac1aedcdac59047480d851d439d37865de11aa2a25eceed5e14467af0fcf",
+  "license": "WTFPL 2.0",
+  "source_url": "https://musical-artifacts.com/artifacts/2527",
+  "license_url": "http://www.wtfpl.net/about/",
+  "attribution": "Actually the zunpet by 'roland blah blah', Musical Artifacts #2527 (2022-12-07), WTFPL 2.0.",
+  "category": "touhou-reference",
+  "distribution": "local-study-only",
+  "notes": "二创参考音色; 仅个人学习使用, 禁止商业使用; 上传者自称真实 SD-90 采样, Roland 权利可能覆盖, 不建议随发行包再分发.",
+  "profiles": [
+    {"id": "zunpet-trumpet", "name": "Romantic Tp (SD-90)", "program": 56}
+  ]
+}

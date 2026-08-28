@@ -1,0 +1,17 @@
+# Touhou Roland SRX EoSD Romantic Trumpet — 出处与许可
+
+- 页面: https://musical-artifacts.com/artifacts/1783
+- 作者: Palto, DrKoupop; 上传 2021-10-16
+- 格式: SF2(`SRX_EoSD_Romantic_Tp.sf2`)
+- 许可声明: **WTFPL 2.0**(可自由再分发)
+  - 全文: http://www.wtfpl.net/about/
+- 下载来源: 经 archive.org Wayback Machine 快照 20211018003944 获取
+  - `http://web.archive.org/web/20211018003944id_/https://musical-artifacts.com/artifacts/1783/SRX_EoSD_Romantic_Tp.sf2`
+- 本机 SHA-256: `123daa313721f8573c4335b582d7f7cf9ac253eaa844bee683ef73817ed7e2a3`
+- 大小: 121,398,714 字节
+
+## 用途与边界
+
+- 本项目用途: 红魔乡标志性小号音色的本地试听/渲染参考(二创参考)。
+- 未核验项: 页面未详述样本来源, 名称含 "SRX"(Roland SRX 扩展卡), 不排除 Roland 采样。
+- 使用要求: 注明东方 Project 二次创作、本发行仅限个人学习使用, 禁止商业使用与再次分发(超出 WTFPL 明文授权范围的部分)。

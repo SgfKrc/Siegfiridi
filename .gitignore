@@ -34,6 +34,7 @@ assets/packs/sources/**/*.wav
 assets/packs/sources/**/*.flac
 assets/packs/sources/**/*.zip
 assets/packs/**/*.7z
+assets/packs/**/*.tar.xz
 assets/models/
 
 # Local tooling state

@@ -27,6 +27,7 @@ class SoundPackManifest:
     source_url: str | None = None
     license_url: str | None = None
     attribution: str | None = None
+    distribution: str = "redistributable"
 
     def __post_init__(self) -> None:
         if not self.id or not self.name or not self.version:
@@ -37,6 +38,8 @@ class SoundPackManifest:
             raise ValueError("sha256 must be a 64-character hexadecimal digest")
         if not self.license:
             raise ValueError("license must not be empty")
+        if not self.distribution:
+            raise ValueError("distribution must not be empty")
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> SoundPackManifest:
@@ -52,7 +55,13 @@ class SoundPackManifest:
             source_url=str(payload["source_url"]) if payload.get("source_url") else None,
             license_url=str(payload["license_url"]) if payload.get("license_url") else None,
             attribution=str(payload["attribution"]) if payload.get("attribution") else None,
+            distribution=str(payload.get("distribution", "redistributable")),
         )
+
+    @property
+    def redistributable(self) -> bool:
+        """Whether this pack may be included in a release bundle."""
+        return self.distribution == "redistributable"
 
     @classmethod
     def load(cls, path: str | Path) -> SoundPackManifest:

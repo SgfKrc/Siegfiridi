@@ -21,7 +21,14 @@ BUILTIN_STYLE_PRESETS: tuple[StylePreset, ...] = (
         tempo_max=150,
         meters=("4/4", "6/8", "12/8"),
         default_roles=("organ", "choir", "strings", "bass"),
-        sound_profile_ids=("cathedral-organ", "dark-choir", "bowed-bass"),
+        sound_profile_ids=(
+            "cathedral-organ",
+            "dark-choir",
+            "bell",
+            "bowed-bass",
+            "plucked-relic",
+            "gothic-percussion",
+        ),
     ),
     StylePreset(
         id="retro-rpg",

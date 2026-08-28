@@ -62,17 +62,19 @@ python -m siegfridi --version      # 版本检查
 python -m siegfridi                # 打开主窗口
 ```
 
+主窗口的 `MIDI Keyboard` 区域会列出已连接的输入设备。设备键数不需要是 128：按控制器说明设置 `Lowest note`、`Key count`（例如 25/49/61/76/88）和 `Target lowest`；可选开启 `MIDI Thru` 或 `Record into selected track`。无设备、设备拔出或驱动打开失败时，应用仍可正常编辑和播放。
+
 无桌面环境或做冒烟测试：
 
 ```powershell
 .\scripts\run-dev.ps1 -Offscreen
 ```
 
-生成主窗口截图进行视觉检查（默认 1440x900，截图写入 `.siegfridi/visual/main-window.png`）：
+生成主窗口截图进行视觉检查（默认 1440x900，截图写入 `.siegfridi/visual/main-window.png`；可选预览本地背景图）：
 
 ```powershell
-$env:PYTHONPATH = "$PWD\src"
 python scripts\capture-gui.py
+python scripts\capture-gui.py --background C:\path\to\image.png --background-opacity 0.25
 ```
 
 ## 6. 生成原创音色（本机开发可选）

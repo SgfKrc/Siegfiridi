@@ -49,6 +49,8 @@ coverage run -m pytest tests/test_app.py tests/test_gui_scenarios.py -q
 coverage report --include="src/siegfridi/app/*" -m
 ```
 
+完整测试质量审计记录和覆盖率基线见 [`TEST_AUDIT.md`](TEST_AUDIT.md)。全量质量门禁命令为 `coverage run -m pytest -q; coverage report -m`，源码语句覆盖率低于 80% 时报告失败。
+
 音频、转录和合成依赖按需安装：`.[audio]`、`.[transcription]`、`.[synthesis]`。发布版会通过 PyInstaller 生成 Windows 安装包，并附第三方许可证、模型和音色包来源清单。
 
 构建 Windows 便携包（需要已安装 `.[all]`）：

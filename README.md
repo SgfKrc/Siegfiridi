@@ -4,9 +4,11 @@ Siegfridi 是一个 Python-first 的 Windows MIDI 编曲工具，优先服务定
 
 一期的音乐方向以东方 Project 风格参考、以《恶魔城》《神之亵渎》为坐标的黑暗哥特风，以及 RPG Maker / BLACK SOULS I-II 语境下的复古 RPG 音轨为审美坐标。参考作品只用于描述风格特征，不复制其旋律、采样、工程文件或其他受保护素材。项目专用音色包、`SoundProfile` 和风格模板与 MIDI 工程分离，方便在不改音符的情况下切换配器。
 
+> 首次上手请直接看 **[QUICKSTART.md](QUICKSTART.md)**：克隆 → 装环境 → 启动 → 生成音色 → 测试，5 分钟跑通。
+
 ## 当前状态
 
-P3 音频转录管线已可实际运行：环境固定为 `numpy<2`、TensorFlow 2.14、Basic Pitch 0.4，并已用合成三音符 WAV 实测生成 3 个候选音符。P4 已接入 SoundFont 清单/哈希校验、FluidSynth CLI 渲染和 pyFluidSynth 原生绑定兜底，并登记了 MIT 许可的 FluidR3_GM 3.1 GM 回退包；同时已获取一份 CC0-1.0 的竹笛 SFZ/WAV 源素材，但尚未转换为 FluidSynth 可用的项目专用 SF2。P5 已提供 PyInstaller Windows onedir 构建，自动收集 FluidSynth 原生运行文件并生成包哈希清单。
+P3 音频转录管线已可实际运行：环境固定为 `numpy<2`、TensorFlow 2.14、Basic Pitch 0.4，并已用合成三音符 WAV 实测生成 3 个候选音符。P4 已接入 SoundFont 清单/哈希校验、FluidSynth CLI 渲染和 pyFluidSynth 原生绑定兜底，并登记了 MIT 许可的 FluidR3_GM 3.1 GM 回退包；项目原创 CC0 东方风格和黑暗哥特风格 SF2 均已生成并可试听。P5 已提供 PyInstaller Windows onedir 构建，自动收集 FluidSynth 原生运行文件并生成包哈希清单。
 
 ## 开发环境
 
@@ -37,7 +39,15 @@ python -m siegfridi
 .\scripts\run-dev.ps1 -Offscreen
 ```
 
-窗口中的钢琴卷帘支持添加、移动、缩放和删除音符；左侧可切换风格、节拍和本地运行时 SoundFont，并将当前工程试听渲染到 `.siegfridi/preview.wav`。
+窗口中的钢琴卷帘支持添加、移动、缩放和删除音符；左侧可切换风格、节拍和本地运行时 SoundFont，并将当前工程试听渲染到 `.siegfridi/preview.wav`。工程可保存为原生 `.siegfridi` 文件，自动生成 `.siegfridi/autosave.siegfridi`，再次保存会轮换 `.bak` 备份；播放支持暂停、恢复、停止和 tick 定位，并可编辑轨道音量/声像。导入音频后由独立 Basic Pitch 进程生成候选轨，可调置信度阈值和量化网格，确认后才写入工程；失败与取消记录到 `.siegfridi/transcription.log`。当前已加入可再分发的原创 CC0 东方风格包 `oriental-project-v01.json` 和黑暗哥特包 `dark-gothic-v01.json`；THFont/NeoTHFont/ZUNpet 等社区参考包保留为本地研究资产，不进入发行构建。
+
+GUI 专项测试与覆盖率：
+
+```powershell
+python -m pytest tests/test_gui_scenarios.py -q
+coverage run -m pytest tests/test_app.py tests/test_gui_scenarios.py -q
+coverage report --include="src/siegfridi/app/*" -m
+```
 
 音频、转录和合成依赖按需安装：`.[audio]`、`.[transcription]`、`.[synthesis]`。发布版会通过 PyInstaller 生成 Windows 安装包，并附第三方许可证、模型和音色包来源清单。
 
@@ -50,6 +60,8 @@ python -m siegfridi
 ```
 
 产物位于 `dist/Siegfridi/`，启动冒烟命令为 `dist/Siegfridi/Siegfridi.exe --version`。构建脚本会从 `SIEGFRIDI_FLUIDSYNTH_DIR` 或 `C:\tools\fluidsynth\bin` 收集 CLI/DLL；SoundFont、模型和录音素材不会因构建自动取得授权，必须通过各自清单导入。
+
+发行构建会先运行 `scripts/build-oriental-pack.py` 和 `scripts/build-gothic-pack.py` 生成原创 CC0 音色，再由清单白名单收集；`local-study-only` 社区参考包不会进入 `dist/`。
 
 获取已核验的 GM 回退音色（约 148 MB，本地文件按 `.gitignore` 排除）：
 
@@ -89,7 +101,7 @@ python -m pip install -e ".[assets]"
 ```text
 src/siegfridi/
   app/            # PySide6 窗口和交互
-  core/           # 工程模型、tick/PPQ、命令栈
+  core/           # 工程模型、tick/PPQ、命令栈和 .siegfridi 序列化
   midi/           # Mido/RtMidi 适配
   audio/          # PyAV/FFmpeg 和预处理
   transcription/  # Basic Pitch、节拍和结果映射

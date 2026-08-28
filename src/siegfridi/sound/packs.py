@@ -24,6 +24,9 @@ class SoundPackManifest:
     sha256: str
     license: str
     profiles: tuple[SoundProfile, ...] = ()
+    source_url: str | None = None
+    license_url: str | None = None
+    attribution: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id or not self.name or not self.version:
@@ -46,6 +49,9 @@ class SoundPackManifest:
             sha256=str(payload["sha256"]).lower(),
             license=str(payload["license"]),
             profiles=profiles,
+            source_url=str(payload["source_url"]) if payload.get("source_url") else None,
+            license_url=str(payload["license_url"]) if payload.get("license_url") else None,
+            attribution=str(payload["attribution"]) if payload.get("attribution") else None,
         )
 
     @classmethod

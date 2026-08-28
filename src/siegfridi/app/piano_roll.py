@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QKeyEvent, QPainter, QPen, QWheelEvent
+from PySide6.QtGui import QBrush, QColor, QKeyEvent, QPainter, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsRectItem,
     QGraphicsScene,
@@ -65,6 +65,9 @@ class PianoRollView(QGraphicsView):
         super().__init__()
         self.setScene(QGraphicsScene(self))
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.viewport().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.viewport().setStyleSheet("background: transparent;")
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
@@ -77,6 +80,8 @@ class PianoRollView(QGraphicsView):
         self._interaction: _Interaction | None = None
         self._keyboard_keys: dict[int, QGraphicsRectItem] = {}
         self._keyboard_labels: dict[int, QGraphicsSimpleTextItem] = {}
+        self._background_pixmap = QPixmap()
+        self._background_opacity = 0.18
         self.command_stack.add_listener(self.refresh)
         self.refresh()
 
@@ -122,6 +127,25 @@ class PianoRollView(QGraphicsView):
     def _track_color(self) -> QColor:
         colors = ("#d56a8b", "#6ab7d5", "#d5ad6a", "#9e7bd6", "#72c49a")
         return QColor(colors[self.track_index % len(colors)])
+
+    def set_background_image(self, path: str | None, opacity: float | None = None) -> bool:
+        """Set the optional image drawn underneath the piano-roll grid."""
+        if path is None:
+            self._background_pixmap = QPixmap()
+            self.refresh()
+            return True
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            return False
+        self._background_pixmap = pixmap
+        if opacity is not None:
+            self._background_opacity = max(0.0, min(1.0, float(opacity)))
+        self.refresh()
+        return True
+
+    def set_background_opacity(self, opacity: float) -> None:
+        self._background_opacity = max(0.0, min(1.0, float(opacity)))
+        self.refresh()
 
     @staticmethod
     def _pitch_label(pitch: int) -> str:
@@ -175,7 +199,7 @@ class PianoRollView(QGraphicsView):
     def refresh(self) -> None:
         scene = self.scene()
         scene.clear()
-        scene.setBackgroundBrush(QBrush(QColor("#17171d")))
+        scene.setBackgroundBrush(QBrush(QColor(23, 23, 29, 224)))
         max_tick = self.GRID_TICK * 8
         if self.project.tracks:
             track = self.project.tracks[self.track_index]
@@ -183,6 +207,20 @@ class PianoRollView(QGraphicsView):
         width = self._tick_to_x(max_tick + self.GRID_TICK)
         height = 128 * self.ROW_HEIGHT
         scene.setSceneRect(0, 0, width, height)
+
+        if not self._background_pixmap.isNull():
+            scaled = self._background_pixmap.scaled(
+                int(width),
+                int(height),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            image_item = scene.addPixmap(scaled)
+            image_item.setOpacity(self._background_opacity)
+            image_item.setZValue(-20)
+            shade = scene.addRect(0, 0, width, height, QPen(Qt.PenStyle.NoPen))
+            shade.setBrush(QBrush(QColor(10, 11, 16, 112)))
+            shade.setZValue(-10)
 
         dark_pen = QPen(QColor("#25252d"))
         beat_pen = QPen(QColor("#3a3a47"))

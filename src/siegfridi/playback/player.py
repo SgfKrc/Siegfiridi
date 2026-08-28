@@ -80,7 +80,7 @@ def midi_output_names() -> tuple[str, ...]:
     """Return available output names without making startup depend on RtMidi."""
     try:
         return tuple(mido.get_output_names())
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
         return ()
 
 
@@ -93,7 +93,7 @@ def open_default_output(name: str | None = None) -> MessageSink | None:
         return None
     try:
         return mido.open_output(output_name)
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
         return None
 
 

@@ -6,7 +6,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtGui import QImage, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -14,6 +14,7 @@ from siegfridi.app.main_window import MainWindow
 from siegfridi.app.piano_roll import PianoRollView
 from siegfridi.core.editing import CommandStack
 from siegfridi.core.models import Note, Project, Track
+from siegfridi.midi import MidiKeyboardEvent
 from siegfridi.synthesis import SynthesisError
 from siegfridi.transcription import CandidateNote, TranscriptionResult
 
@@ -222,6 +223,180 @@ def test_main_window_control_workflow(qapp: QApplication, monkeypatch, tmp_path:
     window.close()
     qapp.processEvents()
     assert fake_player.stopped is True
+
+
+def test_main_window_background_image_and_opacity_controls(qapp: QApplication, monkeypatch, tmp_path: Path) -> None:
+    image = QImage(32, 32, QImage.Format.Format_RGB32)
+    image.fill(0x003f4f66)
+    image_path = tmp_path / "workbench-background.png"
+    assert image.save(str(image_path))
+
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    window.show()
+    qapp.processEvents()
+    assert window.set_background_image(tmp_path / "missing.png") is False
+    window.set_background_opacity(2.0)
+    assert window._backdrop.opacity == pytest.approx(1.0)
+    window.set_background_opacity(-1.0)
+    assert window._backdrop.opacity == pytest.approx(0.0)
+    monkeypatch.setattr(
+        "siegfridi.app.main_window.QFileDialog.getOpenFileName",
+        lambda *_args, **_kwargs: (str(image_path), ""),
+    )
+
+    QTest.mouseClick(window._background_button, Qt.MouseButton.LeftButton)
+    assert window._background_path == image_path.resolve()
+    assert not window.roll._background_pixmap.isNull()
+    assert window._background_clear_button.isEnabled()
+    window.set_background_opacity(0.42)
+    assert window._backdrop.opacity == pytest.approx(0.42)
+    assert "42%" in window._background_info.text()
+
+    QTest.mouseClick(window._background_clear_button, Qt.MouseButton.LeftButton)
+    assert window._background_path is None
+    assert window.roll._background_pixmap.isNull()
+    assert not window._background_clear_button.isEnabled()
+    window.close()
+    qapp.processEvents()
+
+
+def test_main_window_midi_device_connect_thru_and_disconnect(qapp: QApplication, monkeypatch) -> None:
+    from PySide6.QtCore import QSettings
+
+    settings = QSettings("Siegfridi", "Siegfridi")
+    previous_name = settings.value("midi/input_name", None)
+    settings.remove("midi/input_name")
+    opened = []
+
+    class FakeInput:
+        name = "Test Keyboard"
+
+        def __init__(self, mapping) -> None:
+            self.mapping = mapping
+            self.closed = False
+
+        def set_mapping(self, mapping) -> None:
+            self.mapping = mapping
+
+        def close(self) -> None:
+            self.closed = True
+
+    def fake_open(name, _callback, mapping):
+        assert name == "Test Keyboard"
+        port = FakeInput(mapping)
+        opened.append(port)
+        return port
+
+    monkeypatch.setattr("siegfridi.app.main_window.midi_input_names", lambda: ("Test Keyboard",))
+    monkeypatch.setattr("siegfridi.app.main_window.open_midi_input", fake_open)
+    sent = []
+
+    class FakeOutput:
+        def send(self, message) -> None:
+            sent.append(message)
+
+        def close(self) -> None:
+            pass
+
+    output = FakeOutput()
+    monkeypatch.setattr("siegfridi.app.main_window.open_default_output", lambda: output)
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    try:
+        window._midi_input_combo.setCurrentIndex(1)
+        assert window._midi_input is opened[-1]
+        window._midi_lowest_spin.setValue(36)
+        assert opened[-1].mapping.lowest_note == 36
+
+        window._midi_thru_check.setChecked(True)
+        window._on_midi_event(MidiKeyboardEvent("note_on", 60, 60, 100, 2))
+        assert sent[-1].type == "note_on"
+        assert (2, 60) in window._midi_output_notes
+        window._on_midi_event(MidiKeyboardEvent("note_off", 60, 60, 0, 2))
+        assert sent[-1].type == "note_off"
+        assert (2, 60) not in window._midi_output_notes
+
+        # A held note is released when the input is disconnected/closed.
+        window._on_midi_event(MidiKeyboardEvent("note_on", 61, 61, 100, 2))
+        window._midi_input_combo.setCurrentIndex(0)
+        assert opened[-1].closed
+        assert sent[-1].type == "note_off" and sent[-1].note == 61
+    finally:
+        window.close()
+        qapp.processEvents()
+        if previous_name is None:
+            settings.remove("midi/input_name")
+        else:
+            settings.setValue("midi/input_name", previous_name)
+
+
+def test_main_window_midi_output_failure_is_reported(qapp: QApplication) -> None:
+    class FailingOutput:
+        def send(self, _message) -> None:
+            raise RuntimeError("output gone")
+
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    window.player.set_output(FailingOutput())
+    window._midi_thru_check.setChecked(True)
+    window._on_midi_event(MidiKeyboardEvent("note_on", 60, 60, 100, 0))
+    assert "disconnected" in window.statusBar().currentMessage()
+    window._midi_output_notes.add((0, 60))
+    window.close()
+    qapp.processEvents()
+    assert not window._midi_output_notes
+
+
+def test_main_window_handles_midi_scan_and_open_failures(qapp: QApplication, monkeypatch) -> None:
+    from PySide6.QtCore import QSettings
+
+    settings = QSettings("Siegfridi", "Siegfridi")
+    previous_name = settings.value("midi/input_name", None)
+    settings.remove("midi/input_name")
+    monkeypatch.setattr(
+        "siegfridi.app.main_window.midi_input_names",
+        lambda: (_ for _ in ()).throw(ValueError("backend missing")),
+    )
+    window = MainWindow(Project(tracks=[Track("Lead")]))
+    try:
+        assert window._midi_input_combo.count() == 1
+        window._refresh_midi_inputs()
+        assert "No MIDI input devices" in window.statusBar().currentMessage()
+
+        monkeypatch.setattr("siegfridi.app.main_window.midi_input_names", lambda: ("Unavailable",))
+        monkeypatch.setattr("siegfridi.app.main_window.open_midi_input", lambda *_args: None)
+        window._refresh_midi_inputs()
+        window._midi_input_combo.setCurrentIndex(1)
+        assert "MIDI input unavailable" in window.statusBar().currentMessage()
+    finally:
+        window.close()
+        qapp.processEvents()
+        if previous_name is None:
+            settings.remove("midi/input_name")
+        else:
+            settings.setValue("midi/input_name", previous_name)
+
+
+def test_main_window_midi_mapping_and_recording_without_hardware(qapp: QApplication) -> None:
+    project = Project(tracks=[Track("Lead")])
+    window = MainWindow(project)
+    window.show()
+    qapp.processEvents()
+
+    assert window._midi_input_combo.currentData() is None
+    window._midi_thru_check.setChecked(False)
+    window._midi_lowest_spin.setValue(36)
+    window._midi_key_count_spin.setValue(49)
+    window._midi_target_spin.setValue(48)
+    assert window._midi_mapping.key_count == 49
+    assert window._midi_mapping.map_note(36) == 48
+    assert window._midi_mapping.map_note(85) is None
+
+    window._midi_record_check.setChecked(True)
+    window._on_midi_event(MidiKeyboardEvent("note_on", 52, 40, 96, 0))
+    window._on_midi_event(MidiKeyboardEvent("note_off", 52, 40, 0, 0))
+    assert project.tracks[0].notes == [Note(0, 1, 52, 96)]
+    window._midi_record_check.setChecked(False)
+    window.close()
+    qapp.processEvents()
 
 
 def test_main_window_native_project_save_open_and_mix_sync(qapp: QApplication, tmp_path: Path) -> None:

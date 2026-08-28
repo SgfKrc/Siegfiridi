@@ -11,7 +11,13 @@ from siegfridi.core.editing import (
     set_velocity,
 )
 from siegfridi.core.models import Note, Project, Track
-from siegfridi.playback import MidiPlayer, scheduled_events, tick_to_seconds
+from siegfridi.playback import (
+    MidiPlayer,
+    midi_output_names,
+    open_default_output,
+    scheduled_events,
+    tick_to_seconds,
+)
 
 
 def test_edit_commands_round_trip_through_undo_redo() -> None:
@@ -78,6 +84,24 @@ def test_player_sends_events_without_hardware() -> None:
 
     assert [message.type for message in sent] == ["note_on", "note_off"]
     assert waits == [0.0, 0.125]
+
+
+def test_midi_output_discovery_and_open_failures_are_safe(monkeypatch) -> None:
+    monkeypatch.setattr(mido, "get_output_names", lambda: ["Synth", "External"])
+    assert midi_output_names() == ("Synth", "External")
+
+    monkeypatch.setattr(mido, "get_output_names", lambda: (_ for _ in ()).throw(ValueError("backend missing")))
+    assert midi_output_names() == ()
+    assert open_default_output() is None
+
+    class Output:
+        pass
+
+    output = Output()
+    monkeypatch.setattr(mido, "open_output", lambda name: output if name == "Synth" else None)
+    assert open_default_output("Synth") is output
+    monkeypatch.setattr(mido, "open_output", lambda _name: (_ for _ in ()).throw(ValueError("disconnected")))
+    assert open_default_output("Synth") is None
 
 
 def test_player_pause_resume_and_seek_control_background_timeline() -> None:

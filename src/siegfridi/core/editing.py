@@ -37,6 +37,11 @@ class CommandStack:
         """Call a listener after a command changes the project."""
         self._listeners.append(listener)
 
+    def clear(self) -> None:
+        """Discard undo/redo history after replacing the project document."""
+        self._undo.clear()
+        self._redo.clear()
+
     def _notify(self) -> None:
         for listener in tuple(self._listeners):
             listener()

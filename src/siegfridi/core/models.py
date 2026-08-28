@@ -48,6 +48,14 @@ class Track:
     pan: float = 0.0
     sound_profile_id: str | None = None
 
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("track name must not be empty")
+        if not 0.0 <= self.volume <= 1.0:
+            raise ValueError("track volume must be between 0 and 1")
+        if not -1.0 <= self.pan <= 1.0:
+            raise ValueError("track pan must be between -1 and 1")
+
 
 @dataclass(slots=True)
 class Project:
@@ -57,6 +65,7 @@ class Project:
     tempo_bpm: float = 120.0
     tracks: list[Track] = field(default_factory=list)
     style_preset_id: str | None = None
+    sound_pack_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.ppq <= 0:
@@ -70,6 +79,7 @@ class Project:
             ppq=self.ppq,
             tempo_bpm=self.tempo_bpm,
             style_preset_id=self.style_preset_id,
+            sound_pack_id=self.sound_pack_id,
             tracks=[
                 Track(
                     name=track.name,

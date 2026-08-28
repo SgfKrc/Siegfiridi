@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 import mido
 
 from ..core.models import Note, Project, Track
+from ..sound.profiles import SoundProfile
 
 _METADATA_PREFIX = "siegfridi:"
 
@@ -42,7 +43,10 @@ def _note_messages(track: Track) -> Iterable[tuple[int, int, mido.Message]]:
         yield note.end_tick, 0, mido.Message("note_off", note=note.pitch, velocity=0)
 
 
-def project_to_midi(project: Project) -> mido.MidiFile:
+def project_to_midi(
+    project: Project,
+    profile_lookup: Mapping[str, SoundProfile] | None = None,
+) -> mido.MidiFile:
     """Convert a project into a type-1 Standard MIDI File in memory."""
     midi = mido.MidiFile(type=1, ticks_per_beat=project.ppq)
 
@@ -56,6 +60,28 @@ def project_to_midi(project: Project) -> mido.MidiFile:
         midi_track.append(mido.MetaMessage("track_name", name=track.name, time=0))
         midi_track.append(mido.MetaMessage("text", text=_track_metadata(track), time=0))
 
+        profile = profile_lookup.get(track.sound_profile_id) if profile_lookup and track.sound_profile_id else None
+        if profile is not None:
+            bank_msb, bank_lsb = divmod(profile.bank, 128)
+            if bank_msb:
+                midi_track.append(mido.Message("control_change", control=0, value=bank_msb, time=0))
+            if bank_lsb:
+                midi_track.append(mido.Message("control_change", control=32, value=bank_lsb, time=0))
+            midi_track.append(mido.Message("program_change", program=profile.program, time=0))
+        if track.volume != 1.0:
+            midi_track.append(
+                mido.Message("control_change", control=7, value=round(track.volume * 127), time=0)
+            )
+        if track.pan != 0.0:
+            midi_track.append(
+                mido.Message(
+                    "control_change",
+                    control=10,
+                    value=round((track.pan + 1.0) * 63.5),
+                    time=0,
+                )
+            )
+
         events = sorted(_note_messages(track), key=lambda item: (item[0], item[1]))
         last_tick = 0
         for tick, _, message in events:
@@ -68,9 +94,13 @@ def project_to_midi(project: Project) -> mido.MidiFile:
     return midi
 
 
-def save_project(project: Project, path: str | Path) -> None:
+def save_project(
+    project: Project,
+    path: str | Path,
+    profile_lookup: Mapping[str, SoundProfile] | None = None,
+) -> None:
     """Write a project as a Standard MIDI File."""
-    project_to_midi(project).save(str(path))
+    project_to_midi(project, profile_lookup).save(str(path))
 
 
 def midi_to_project(midi: mido.MidiFile) -> Project:
@@ -84,6 +114,8 @@ def midi_to_project(midi: mido.MidiFile) -> Project:
         track_name = f"Track {index + 1}"
         role = "custom"
         profile_id: str | None = None
+        volume = 1.0
+        pan = 0.0
         open_notes: dict[tuple[int, int], list[tuple[int, int]]] = {}
         notes: list[Note] = []
 
@@ -120,6 +152,11 @@ def midi_to_project(midi: mido.MidiFile) -> Project:
                         )
                     if not pending:
                         open_notes.pop(key, None)
+            elif message.type == "control_change":
+                if message.control == 7:
+                    volume = message.value / 127.0
+                elif message.control == 10:
+                    pan = message.value / 63.5 - 1.0
 
         # A malformed file may omit note-offs. Do not create unbounded notes.
         track_end = max((note.end_tick for note in notes), default=absolute_tick)
@@ -141,6 +178,8 @@ def midi_to_project(midi: mido.MidiFile) -> Project:
                     name=track_name,
                     role=role,
                     notes=sorted(notes, key=lambda note: (note.start_tick, note.pitch)),
+                    volume=volume,
+                    pan=pan,
                     sound_profile_id=profile_id,
                 )
             )

@@ -62,7 +62,9 @@ python -m siegfridi --version      # 版本检查
 python -m siegfridi                # 打开主窗口
 ```
 
-主窗口的 `MIDI Keyboard` 区域会列出已连接的输入设备。设备键数不需要是 128：按控制器说明设置 `Lowest note`、`Key count`（例如 25/49/61/76/88）和 `Target lowest`；可选开启 `MIDI Thru` 或 `Record into selected track`。无设备、设备拔出或驱动打开失败时，应用仍可正常编辑和播放。
+主窗口的钢琴卷帘左侧用 128 键键盘标识音高，顶部 tick 标尺和金色游标显示时间与播放位置，标尺/键盘区域不会创建音符。`MIDI Keyboard` 区域会列出已连接的输入设备。设备键数不需要是 128：按控制器说明设置 `Lowest note`、`Key count`（例如 25/49/61/76/88）和 `Target lowest`；可选开启 `MIDI Thru` 或 `Record into selected track`。无设备、设备拔出或驱动打开失败时，应用仍可正常编辑和播放。
+
+工具栏动作和播放按钮悬停时会显示用途及快捷键；打开/保存/导入对话框取消、播放失败、转录处理中/失败/取消等结果会显示在窗口底部状态栏，不会弹出阻塞式错误窗口。转录失败或取消会自动恢复导入按钮，且不会修改当前工程。
 
 无桌面环境或做冒烟测试：
 
@@ -74,8 +76,17 @@ python -m siegfridi                # 打开主窗口
 
 ```powershell
 python scripts\capture-gui.py
-python scripts\capture-gui.py --background C:\path\to\image.png --background-opacity 0.25
+python scripts\capture-gui.py --theme quiet-light --background C:\path\to\image.png --background-opacity 0.25 --background-fit fit --background-protection 0.55
 ```
+
+运行 N7 视觉基准检查（包含桌面、浅色、窄屏和无 MIDI 输出设备场景）：
+
+```powershell
+python scripts\check-gui-visual.py --output-dir .siegfridi\visual\n7-005
+python scripts\check-gui-visual.py --output-dir .siegfridi\visual\n7-005-hidpi --scale-factor 1.25
+```
+
+检查项和 Windows 实机人工清单见 [`VISUAL_CHECKLIST.md`](VISUAL_CHECKLIST.md)。
 
 ## 6. 生成原创音色（本机开发可选）
 

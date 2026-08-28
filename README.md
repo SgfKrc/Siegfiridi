@@ -39,7 +39,7 @@ python -m siegfridi
 .\scripts\run-dev.ps1 -Offscreen
 ```
 
-窗口中的钢琴卷帘支持添加、移动、缩放和删除音符；左侧可切换风格、节拍和本地运行时 SoundFont，并将当前工程试听渲染到 `.siegfridi/preview.wav`。工程可保存为原生 `.siegfridi` 文件，自动生成 `.siegfridi/autosave.siegfridi`，再次保存会轮换 `.bak` 备份；播放支持暂停、恢复、停止和 tick 定位，并可编辑轨道音量/声像。导入音频后由独立 Basic Pitch 进程生成候选轨，可调置信度阈值和量化网格，确认后才写入工程；失败与取消记录到 `.siegfridi/transcription.log`。当前已加入可再分发的原创 CC0 东方风格包 `oriental-project-v01.json` 和黑暗哥特包 `dark-gothic-v01.json`；THFont/NeoTHFont/ZUNpet 等社区参考包保留为本地研究资产，不进入发行构建。
+窗口中的钢琴卷帘支持添加、移动、缩放和删除音符；左侧钢琴键盘标识音高，顶部 tick 标尺和金色播放游标同步定位，标尺/键盘区域为只读。工作区提供 Dark Gothic、High Contrast、Quiet Light 三套 UI 主题，以及背景图 Cover/Fit、透明度、可读性保护强度和恢复默认；这些界面偏好通过 QSettings 持久化。左侧可切换风格、节拍和本地运行时 SoundFont，并将当前工程试听渲染到 `.siegfridi/preview.wav`。工程可保存为原生 `.siegfridi` 文件，自动生成 `.siegfridi/autosave.siegfridi`，再次保存会轮换 `.bak` 备份；播放支持暂停、恢复、停止和 tick 定位，并可编辑轨道音量/声像。导入音频后由独立 Basic Pitch 进程生成候选轨，可调置信度阈值和量化网格，确认后才写入工程；失败与取消记录到 `.siegfridi/transcription.log`。工具栏和播放控件提供快捷键/悬停提示，文件选择、播放、转录和无选中轨道等结果统一显示在非模态状态栏中。当前已加入可再分发的原创 CC0 东方风格包 `oriental-project-v01.json` 和黑暗哥特包 `dark-gothic-v01.json`；THFont/NeoTHFont/ZUNpet 等社区参考包保留为本地研究资产，不进入发行构建。
 
 GUI 专项测试与覆盖率：
 
@@ -47,6 +47,13 @@ GUI 专项测试与覆盖率：
 python -m pytest tests/test_gui_scenarios.py -q
 coverage run -m pytest tests/test_app.py tests/test_gui_scenarios.py -q
 coverage report --include="src/siegfridi/app/*" -m
+```
+
+视觉基准检查（桌面/浅色/窄屏、无 MIDI 输出设备和高 DPI 冒烟）以及人工检查清单见 [`VISUAL_CHECKLIST.md`](VISUAL_CHECKLIST.md)：
+
+```powershell
+python scripts/check-gui-visual.py --output-dir .siegfridi\visual\n7-005
+python scripts/check-gui-visual.py --output-dir .siegfridi\visual\n7-005-hidpi --scale-factor 1.25
 ```
 
 完整测试质量审计记录和覆盖率基线见 [`TEST_AUDIT.md`](TEST_AUDIT.md)。全量质量门禁命令为 `coverage run -m pytest -q; coverage report -m`，源码语句覆盖率低于 80% 时报告失败。

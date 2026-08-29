@@ -1,0 +1,40 @@
+{
+  "format": "siegfridi-project",
+  "schema_version": 1,
+  "ppq": 480,
+  "tempo_bpm": 146,
+  "style_preset_id": "oriental-project",
+  "sound_pack_id": "oriental-project-v01",
+  "tracks": [
+    {
+      "name": "Scarlet Motif",
+      "role": "fm-lead",
+      "muted": false,
+      "solo": false,
+      "volume": 0.88,
+      "pan": 0.0,
+      "sound_profile_id": "fm-lead",
+      "notes": [
+        {"start_tick": 0, "duration_tick": 240, "pitch": 76, "velocity": 112},
+        {"start_tick": 240, "duration_tick": 240, "pitch": 79, "velocity": 108},
+        {"start_tick": 480, "duration_tick": 240, "pitch": 83, "velocity": 116},
+        {"start_tick": 720, "duration_tick": 240, "pitch": 79, "velocity": 104},
+        {"start_tick": 960, "duration_tick": 480, "pitch": 76, "velocity": 110}
+      ]
+    },
+    {
+      "name": "Clockwork Bass",
+      "role": "fm-bass",
+      "muted": false,
+      "solo": false,
+      "volume": 0.72,
+      "pan": -0.12,
+      "sound_profile_id": "fm-bass",
+      "notes": [
+        {"start_tick": 0, "duration_tick": 480, "pitch": 40, "velocity": 100},
+        {"start_tick": 480, "duration_tick": 480, "pitch": 43, "velocity": 96},
+        {"start_tick": 960, "duration_tick": 480, "pitch": 36, "velocity": 104}
+      ]
+    }
+  ]
+}

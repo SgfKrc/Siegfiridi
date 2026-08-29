@@ -1,0 +1,38 @@
+{
+  "format": "siegfridi-project",
+  "schema_version": 1,
+  "ppq": 480,
+  "tempo_bpm": 98,
+  "style_preset_id": "retro-rpg",
+  "sound_pack_id": "fluidr3-gm",
+  "tracks": [
+    {
+      "name": "Dungeon FM Lead",
+      "role": "fm-lead",
+      "muted": false,
+      "solo": false,
+      "volume": 0.82,
+      "pan": 0.18,
+      "sound_profile_id": "fm-lead",
+      "notes": [
+        {"start_tick": 0, "duration_tick": 360, "pitch": 67, "velocity": 102},
+        {"start_tick": 360, "duration_tick": 120, "pitch": 70, "velocity": 96},
+        {"start_tick": 480, "duration_tick": 480, "pitch": 74, "velocity": 108},
+        {"start_tick": 960, "duration_tick": 480, "pitch": 70, "velocity": 100}
+      ]
+    },
+    {
+      "name": "Stone Hall Bass",
+      "role": "fm-bass",
+      "muted": false,
+      "solo": false,
+      "volume": 0.76,
+      "pan": -0.18,
+      "sound_profile_id": "fm-bass",
+      "notes": [
+        {"start_tick": 0, "duration_tick": 960, "pitch": 31, "velocity": 96},
+        {"start_tick": 960, "duration_tick": 960, "pitch": 34, "velocity": 100}
+      ]
+    }
+  ]
+}

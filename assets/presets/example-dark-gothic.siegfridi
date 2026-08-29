@@ -1,0 +1,38 @@
+{
+  "format": "siegfridi-project",
+  "schema_version": 1,
+  "ppq": 480,
+  "tempo_bpm": 112.0,
+  "style_preset_id": "dark-gothic",
+  "sound_pack_id": "dark-gothic-v01",
+  "tracks": [
+    {
+      "name": "Cathedral Lead",
+      "role": "melody",
+      "muted": false,
+      "solo": false,
+      "volume": 0.9,
+      "pan": -0.15,
+      "sound_profile_id": "cathedral-organ",
+      "notes": [
+        {"start_tick": 0, "duration_tick": 480, "pitch": 60, "velocity": 104},
+        {"start_tick": 480, "duration_tick": 480, "pitch": 63, "velocity": 96},
+        {"start_tick": 960, "duration_tick": 960, "pitch": 67, "velocity": 108},
+        {"start_tick": 1920, "duration_tick": 960, "pitch": 65, "velocity": 94}
+      ]
+    },
+    {
+      "name": "Low Strings",
+      "role": "bass",
+      "muted": false,
+      "solo": false,
+      "volume": 0.78,
+      "pan": 0.15,
+      "sound_profile_id": "bowed-bass",
+      "notes": [
+        {"start_tick": 0, "duration_tick": 1920, "pitch": 36, "velocity": 88},
+        {"start_tick": 1920, "duration_tick": 1920, "pitch": 34, "velocity": 84}
+      ]
+    }
+  ]
+}

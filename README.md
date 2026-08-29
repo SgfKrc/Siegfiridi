@@ -58,7 +58,7 @@ python scripts/check-gui-visual.py --output-dir .siegfridi\visual\n7-005-hidpi -
 
 完整测试质量审计记录和覆盖率基线见 [`TEST_AUDIT.md`](TEST_AUDIT.md)。全量质量门禁命令为 `coverage run -m pytest -q; coverage report -m`，源码语句覆盖率低于 80% 时报告失败。
 
-音频、转录和合成依赖按需安装：`.[audio]`、`.[transcription]`、`.[synthesis]`。发布版会通过 PyInstaller 生成 Windows 安装包，并附第三方许可证、模型和音色包来源清单。
+音频、转录和合成依赖按需安装：`.[audio]`、`.[transcription]`、`.[synthesis]`。发布版会通过 PyInstaller 生成 Windows 便携包，并附第三方许可证、固定依赖快照、模型和音色包来源清单；完整的 N6 干净机交接步骤见 [`N6_RELEASE_HANDOFF.md`](N6_RELEASE_HANDOFF.md)。
 
 构建 Windows 便携包（需要已安装 `.[all]`）：
 
@@ -68,7 +68,7 @@ python scripts/check-gui-visual.py --output-dir .siegfridi\visual\n7-005-hidpi -
 .\scripts\build.ps1 -Clean
 ```
 
-产物位于 `dist/Siegfridi/`，启动冒烟命令为 `dist/Siegfridi/Siegfridi.exe --version`。构建脚本会从 `SIEGFRIDI_FLUIDSYNTH_DIR` 或 `C:\tools\fluidsynth\bin` 收集 CLI/DLL；SoundFont、模型和录音素材不会因构建自动取得授权，必须通过各自清单导入。
+产物位于 `dist/Siegfridi/`，启动冒烟命令为 `dist/Siegfridi/Siegfridi.exe --version`。构建脚本会从 `SIEGFRIDI_FLUIDSYNTH_DIR` 或 `C:\tools\fluidsynth\bin` 收集 CLI/DLL；SoundFont、模型和录音素材不会因构建自动取得授权，必须通过各自清单导入。成功后还会生成 `dist/Siegfridi-0.1.0-win64.zip`、`Siegfridi-release.json`、`Siegfridi-release.sha256` 和包内文件校验报告，干净机验收按 [`N6_RELEASE_HANDOFF.md`](N6_RELEASE_HANDOFF.md) 执行。
 
 发行构建会先运行 `scripts/build-oriental-pack.py` 和 `scripts/build-gothic-pack.py` 生成原创 CC0 音色，再由清单白名单收集；`local-study-only` 社区参考包不会进入 `dist/`。
 
@@ -104,6 +104,10 @@ python -m pip install -e ".[assets]"
 因此项目采用两条路线：默认使用 CC0/MIT/原创素材制作“ZUN 风格特征”音色，不复制原作样本；用户若自行取得社区音色，只能作为本地外部导入，并在发布前完成逐文件授权和哈希审查。
 
 待自行核验的社区候选已整理在 [`assets/packs/EXTERNAL_CANDIDATES.md`](assets/packs/EXTERNAL_CANDIDATES.md)，其中包含 THFont、NeoTHFont、ZUNpet/ Romantic Tp 复刻包和相关资料索引，以及逐项核验表。该文档中的链接是研究入口，不表示项目已取得这些包的再分发权。
+
+## 选择模式
+
+点击左侧 Select mode 后光标变为十字，可单击 Ctrl 多选或框选当前音轨；复制后在卷帘中移动鼠标定位任意 tick/音高，半透明预览显示整组移调结果，点击 Paste 或按 Ctrl+V 一次性写入并可整体撤销。普通模式仍用于点按加音符和拖动编辑。
 
 ## 目录
 

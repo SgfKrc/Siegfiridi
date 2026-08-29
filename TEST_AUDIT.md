@@ -1,28 +1,41 @@
 # Test Quality Audit
 
-审计日期：2026-08-28
+审计日期：2026-08-29
 
-## 基线
+## 当前基线
 
-- 审计前 `pytest --collect-only`：90 个收集项，78 个测试函数。
-- 首轮源码语句覆盖率：86%。审计时发现 coverage 默认把 Qt/启动辅助文件也记入数据，已在 `pyproject.toml` 限定 `src/siegfridi`，并设置 `fail_under = 80`。
-- 主要缺口：`main_window.py` 的设备交互分支、`core/project_io.py` 的损坏/恢复路径、`midi/input.py` 的端口生命周期，以及播放设备发现异常。
+- `pytest --collect-only -q`：135 项收集项。
+- `coverage run --branch -m pytest -q && coverage report -m`：全量通过，源码分支覆盖率 88%，`fail_under` 仍为 80%。
+- 关键模块覆盖率：`app/piano_roll.py` 92%、`core/models.py` 100%、`midi/files.py` 92%、`workers/transcription.py` 93%、`sound/profiles.py` 100%。
+- `ruff check src tests scripts`：通过。
+- `scripts/check-gui-visual.py`：dark-gothic、quiet-light、high-contrast 窗口场景均通过，截图与工作区几何检查正常。
 
-## 本次更新
+## 本次审计与更新
 
-- 增加 MIDI 映射边界、velocity-zero note-off、非音符消息、回调绑定失败和关闭竞态测试。
-- 增加播放输出枚举和打开失败测试，覆盖后端返回 `ValueError` 的情况。
-- 增加项目文件缺字段、嵌套数据损坏、非法 JSON、后缀校验和原子写失败恢复测试。
-- 增加 Qt 场景级 MIDI 连接、映射刷新、MIDI Thru、断开释放悬挂音符、输出失败，以及背景文件/透明度边界测试。
+- 将 coverage 配置明确设为 `branch = true`，以后审计同时关注语句和条件分支。
+- 补充 `Note`、`Track`、`Project`、`SoundProfile`、`StylePreset` 的非法边界输入测试，避免无效 MIDI 值和混音参数进入核心模型。
+- 补充分组编辑命令的身份语义、空 undo/redo、监听通知和 MIDI 同音并发 FIFO 配对测试。
+- 补充 MIDI velocity-zero note-off、尾部缺失 note-off 和导出同刻 note-off 优先级回归测试。
+- 补充 Basic Pitch 导入失败、推理失败、模型缺失、预测结构归一化测试，不依赖真实模型即可验证依赖冲突降级行为。
+- 补充转录 worker 的成功消息、空轮询、重复启动、取消活进程和上下文管理器测试。
+- 补充选择模式快捷键、音域夹紧、半透明预览、Esc 清理剪贴板和空轨道反馈测试。
+- 审计期间修复一个真实缺陷：MIDI 导入器在轨道省略尾部 `note_off` 时错误采用已闭合音符的结束点，导致尾音被截断；现在使用实际轨道结束 tick 作为安全边界。
 
-审计后 `pytest --collect-only` 为 107 个收集项；全量 `coverage run -m pytest -q && coverage report -m` 结果为源码语句覆盖率 89%，其中 `main_window.py` 87%、`project_io.py` 92%、`midi/input.py` 96%、播放设备模块 92%。CLI 入口的参数解析和 launcher 委托已覆盖，模块保护式启动行仍只在真实命令启动时执行。
+## 验证记录
 
-N7-002 之后，Qt 场景测试新增钢琴卷帘标尺、只读区域、播放游标和 1 万音符刷新/滚动烟测，收集项增至 109；这类视觉几何断言保持在 offscreen 场景层，真实窗口截图仍由 N7-005 负责。当前 offscreen 环境没有可枚举字体，截图可用于布局/几何检查，文字字形和高 DPI 观感仍需 Windows 实机验收。
+```text
+135 passed
+TOTAL branch coverage: 88%
+ruff check: All checks passed
+GUI visual: 3 scenarios passed
+git diff --check: passed (仅有 Git 的 LF/CRLF 提示)
+```
 
-N7-003 增加主题同步、背景 Cover/Fit、保护强度、恢复默认和 QSettings 兼容键场景；主题/背景参数也已暴露给截图工具，便于后续基准图回归。当前收集项为 110，源码语句覆盖率为 90%。
-N7-004 增加操作提示、快捷键提示、播放/文件对话框取消反馈，以及转录启动失败和轮询失败的 Qt 场景；当前收集项为 114，交互异常保持在状态栏和候选信息区域内，不弹出阻塞式错误对话框。
-N7-005 增加控制面板纵向滚动后的桌面/窄屏几何场景，新增 `scripts/check-gui-visual.py` 生成三套主题基准图并检查标准/高 DPI DPR、非空截图、工作区边界和无音频回退；当前收集项为 118，offscreen 字体枚举为空的限制已记录到人工检查清单。
+Basic Pitch 实机测试仍可能输出 TensorFlow、`pkg_resources` 和 Python 3.13 弃用警告；这些来自可选依赖，不影响本次测试结果。
 
 ## 残余风险
 
-测试仍使用 Qt offscreen 和模拟 MIDI 端口，不能替代真实声卡、真实 MIDI 热插拔和不同 RtMidi 后端的验收；这些保留在干净机验收清单中。可选 Basic Pitch/FluidSynth 资产测试在依赖或音色包缺失时跳过，核心错误路径仍由无外部资产的单元测试覆盖。
+- Qt 测试使用 `offscreen` 平台，不能替代 Windows 实机的字体、高 DPI、窗口管理器和真实鼠标拖拽验收。
+- MIDI 端口使用模拟对象，不能替代真实声卡、热插拔和不同 RtMidi 后端测试。
+- Basic Pitch、FluidSynth 和音色包的资产测试在依赖或本地资产缺失时跳过；无外部资产的错误路径已有覆盖。
+- 真实冻结包仍需按 `N6_RELEASE_HANDOFF.md` 在干净机执行启动、播放、MIDI 和视觉清单。

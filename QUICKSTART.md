@@ -22,6 +22,8 @@ python -m pip install --upgrade pip 'setuptools<81' wheel
 
 ## 3. 安装依赖
 
+选择模式用于长曲目的片段复用：点击左侧 Select mode 后光标变为十字，可单击 Ctrl 多选或框选当前音轨，复制后在卷帘中移动鼠标定位任意 tick/音高，半透明预览显示整组移调结果，点击 Paste 或按 Ctrl+V 一次性写入并可整体撤销。普通模式仍用于点按加音符和拖动编辑。
+
 按用途选择，可叠加：
 
 ```powershell
@@ -119,6 +121,10 @@ python -m pytest --cov=siegfridi --cov-report=term   # 覆盖率
 # 产物 dist/Siegfridi/，冒烟命令：
 dist\Siegfridi\Siegfridi.exe --version
 ```
+
+构建完成后还会生成 `dist/Siegfridi-0.1.0-win64.zip`、`Siegfridi-release.json`、
+`Siegfridi-release.sha256` 和包内文件校验报告；无 Python 的机器按
+[`N6_RELEASE_HANDOFF.md`](N6_RELEASE_HANDOFF.md) 解压、校验和验收。
 
 ## 常见问题
 

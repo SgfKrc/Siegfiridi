@@ -159,7 +159,10 @@ def midi_to_project(midi: mido.MidiFile) -> Project:
                     pan = message.value / 63.5 - 1.0
 
         # A malformed file may omit note-offs. Do not create unbounded notes.
-        track_end = max((note.end_tick for note in notes), default=absolute_tick)
+        # Use the actual MIDI track end as the fallback boundary for notes
+        # without a matching note-off; otherwise a later dangling note can
+        # be silently truncated to the last already-closed note.
+        track_end = max(absolute_tick, max((note.end_tick for note in notes), default=0))
         for (_, pitch), pending in open_notes.items():
             for start_tick, velocity in pending:
                 if track_end > start_tick:

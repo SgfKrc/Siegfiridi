@@ -1,6 +1,59 @@
+import pytest
+
 from siegfridi.core.models import Note, Project, Track
-from siegfridi.midi.files import load_project, project_to_midi, save_project
+from siegfridi.midi.files import load_project, midi_to_project, project_to_midi, save_project
 from siegfridi.sound.profiles import SoundProfile, StylePreset
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"start_tick": -1, "duration_tick": 1, "pitch": 60}, "start_tick"),
+        ({"start_tick": 0, "duration_tick": 0, "pitch": 60}, "duration_tick"),
+        ({"start_tick": 0, "duration_tick": 1, "pitch": -1}, "pitch"),
+        ({"start_tick": 0, "duration_tick": 1, "pitch": 128}, "pitch"),
+        ({"start_tick": 0, "duration_tick": 1, "pitch": 60, "velocity": 0}, "velocity"),
+        ({"start_tick": 0, "duration_tick": 1, "pitch": 60, "velocity": 128}, "velocity"),
+    ],
+)
+def test_note_rejects_invalid_midi_values(kwargs: dict, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        Note(**kwargs)
+
+
+def test_note_quantization_requires_positive_grid() -> None:
+    with pytest.raises(ValueError, match="grid_tick"):
+        Note(0, 1, 60).quantized(0)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: Track("", notes=[]),
+        lambda: Track("Lead", volume=-0.1),
+        lambda: Track("Lead", volume=1.1),
+        lambda: Track("Lead", pan=-1.1),
+        lambda: Track("Lead", pan=1.1),
+        lambda: Project(ppq=0),
+        lambda: Project(tempo_bpm=0),
+    ],
+)
+def test_project_and_track_boundaries_are_validated(factory) -> None:
+    with pytest.raises(ValueError):
+        factory()
+
+
+def test_sound_profile_and_style_preset_boundaries_are_validated() -> None:
+    with pytest.raises(ValueError, match="id"):
+        SoundProfile(id="", name="broken")
+    with pytest.raises(ValueError, match="bank"):
+        SoundProfile(id="lead", name="Lead", bank=16384)
+    with pytest.raises(ValueError, match="program"):
+        SoundProfile(id="lead", name="Lead", program=128)
+    with pytest.raises(ValueError, match="id"):
+        StylePreset(id="", name="broken")
+    with pytest.raises(ValueError, match="tempo range"):
+        StylePreset(id="bad", name="Bad", tempo_min=180, tempo_max=90)
 
 
 def test_note_quantization_preserves_pitch_and_velocity() -> None:
@@ -102,6 +155,67 @@ def test_midi_export_emits_sound_profile_program_and_bank() -> None:
     ]
     assert messages[2].type == "program_change"
     assert messages[2].program == 56
+
+
+def test_midi_import_handles_velocity_zero_and_unclosed_notes() -> None:
+    import mido
+
+    midi = mido.MidiFile(ticks_per_beat=480)
+    track = mido.MidiTrack()
+    track.extend(
+        [
+            mido.MetaMessage("track_name", name="Input"),
+            mido.Message("note_on", note=60, velocity=90, time=0),
+            mido.Message("note_on", note=60, velocity=0, time=120),
+            mido.Message("note_on", note=64, velocity=80, time=120),
+            mido.MetaMessage("end_of_track", time=240),
+        ]
+    )
+    midi.tracks.append(track)
+
+    project = midi_to_project(midi)
+
+    assert project.tracks[0].notes == [Note(0, 120, 60, 90), Note(240, 240, 64, 80)]
+
+
+def test_midi_import_pairs_overlapping_same_pitch_notes_fifo() -> None:
+    import mido
+
+    midi = mido.MidiFile(ticks_per_beat=480)
+    midi.tracks.append(
+        mido.MidiTrack(
+            [
+                mido.Message("note_on", note=60, velocity=70, time=0),
+                mido.Message("note_on", note=60, velocity=90, time=120),
+                mido.Message("note_off", note=60, velocity=0, time=120),
+                mido.Message("note_off", note=60, velocity=0, time=120),
+            ]
+        )
+    )
+
+    project = midi_to_project(midi)
+
+    assert project.tracks[0].notes == [Note(0, 240, 60, 70), Note(120, 240, 60, 90)]
+
+
+def test_midi_export_orders_note_off_before_note_on_at_same_tick() -> None:
+    project = Project(
+        tracks=[
+            Track(
+                "Lead",
+                notes=[Note(0, 480, 60), Note(480, 240, 64)],
+            )
+        ]
+    )
+
+    messages = [message for message in project_to_midi(project).tracks[1] if not message.is_meta]
+
+    assert [(message.type, message.time) for message in messages] == [
+        ("note_on", 0),
+        ("note_off", 480),
+        ("note_on", 0),
+        ("note_off", 240),
+    ]
 
 
 def test_midi_round_trip_preserves_track_mix_controls(tmp_path) -> None:

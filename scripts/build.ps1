@@ -12,6 +12,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $Root = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $Root '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $Python)) {
@@ -66,5 +67,46 @@ $VersionOutput = & $Executable --version
 if ($LASTEXITCODE -ne 0 -or $VersionOutput -notmatch '^0\.1\.0$') {
     throw "Packaged executable smoke test failed: $VersionOutput"
 }
+$PreviousQtPlatform = $env:QT_QPA_PLATFORM
+$env:QT_QPA_PLATFORM = 'offscreen'
+$UiSmoke = Start-Process -FilePath $Executable -PassThru -WindowStyle Hidden
+try {
+    Start-Sleep -Seconds 10
+    if ($UiSmoke.HasExited) {
+        throw "Packaged UI smoke test exited early with code $($UiSmoke.ExitCode)"
+    }
+    $UiProcess = Get-Process -Id $UiSmoke.Id -ErrorAction Stop
+    if (-not $UiProcess.Responding) {
+        throw 'Packaged UI smoke test process is not responding'
+    }
+} finally {
+    if (-not $UiSmoke.HasExited) {
+        Stop-Process -Id $UiSmoke.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($null -eq $PreviousQtPlatform) {
+        Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+    } else {
+        $env:QT_QPA_PLATFORM = $PreviousQtPlatform
+    }
+}
+$PackageReport = Join-Path $Root 'dist\Siegfridi-package-report.json'
+& $Python (Join-Path $Root 'scripts\verify-package.py') $Distribution --version $VersionOutput --report $PackageReport
+if ($LASTEXITCODE -ne 0) { throw 'Packaged directory verification failed' }
+$Archive = Join-Path $Root ("dist\Siegfridi-{0}-win64.zip" -f $VersionOutput)
+if (Test-Path -LiteralPath $Archive) { Remove-Item -LiteralPath $Archive -Force }
+Compress-Archive -Path $Distribution -DestinationPath $Archive -CompressionLevel Optimal
+$ArchiveHash = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
+$ReleaseReport = [ordered]@{
+    application = 'siegfridi'
+    version = $VersionOutput
+    directory = 'Siegfridi'
+    archive = [IO.Path]::GetFileName($Archive)
+    archive_sha256 = $ArchiveHash
+    package_report = [IO.Path]::GetFileName($PackageReport)
+}
+$ReleaseReport | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Root 'dist\Siegfridi-release.json') -Encoding utf8
+"$ArchiveHash  $([IO.Path]::GetFileName($Archive))" | Set-Content -LiteralPath (Join-Path $Root 'dist\Siegfridi-release.sha256') -Encoding ascii
 Write-Host "Package ready: $Distribution" -ForegroundColor Green
 Write-Host "Smoke test: siegfridi --version -> $VersionOutput" -ForegroundColor Green
+Write-Host "Archive ready: $Archive" -ForegroundColor Green
+Write-Host "Archive SHA-256: $ArchiveHash" -ForegroundColor Green

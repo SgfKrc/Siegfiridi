@@ -73,6 +73,7 @@ addopts = "-q"
 
 [tool.coverage.run]
 source = ["src/siegfridi"]
+branch = true
 
 [tool.coverage.report]
 show_missing = true

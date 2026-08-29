@@ -36,6 +36,17 @@ for manifest_path in pack_root.glob("*.json"):
 for pattern in ("*.COPYING", "*.CC0.txt", "*.SOURCE.txt", "README.md"):
     datas.extend((str(path), "assets/packs") for path in pack_root.glob(pattern))
 datas.append((str(project_root / "assets" / "presets"), "assets/presets"))
+for document in (
+    "README.md",
+    "QUICKSTART.md",
+    "VISUAL_CHECKLIST.md",
+    "requirements-lock-win-py311.txt",
+    "N6_RELEASE_HANDOFF.md",
+    "packaging/THIRD_PARTY_NOTICES.md",
+):
+    document_path = project_root / document
+    if document_path.is_file():
+        datas.append((str(document_path), "docs" if document != "packaging/THIRD_PARTY_NOTICES.md" else "."))
 
 # pyFluidSynth loads its implementation with ctypes, so PyInstaller cannot
 # discover the native files from Python imports alone.
@@ -51,6 +62,7 @@ hiddenimports = [
     "basic_pitch",
     "basic_pitch.inference",
     "basic_pitch.predict",
+    "mido.backends.rtmidi",
 ]
 datas += collect_data_files("basic_pitch", include_py_files=False)
 

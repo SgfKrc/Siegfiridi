@@ -117,6 +117,33 @@ class AddNoteCommand:
 
 
 @dataclass(slots=True)
+class AddNotesCommand:
+    """Add a group of notes as one undoable edit."""
+
+    project: Project
+    track_index: int
+    notes: tuple[Note, ...]
+
+    def __post_init__(self) -> None:
+        self.notes = tuple(self.notes)
+
+    def execute(self) -> None:
+        track = _track(self.project, self.track_index)
+        for note in self.notes:
+            if not any(existing is note for existing in track.notes):
+                track.notes.append(note)
+        track.notes.sort(key=lambda item: (item.start_tick, item.pitch, item.duration_tick))
+
+    def undo(self) -> None:
+        track = _track(self.project, self.track_index)
+        track.notes[:] = [
+            existing
+            for existing in track.notes
+            if not any(existing is note for note in self.notes)
+        ]
+
+
+@dataclass(slots=True)
 class DeleteNoteCommand:
     project: Project
     track_index: int

@@ -1,9 +1,11 @@
 import time
 
 import mido
+import pytest
 
 from siegfridi.core.editing import (
     AddNoteCommand,
+    AddNotesCommand,
     CommandStack,
     find_note_index,
     move_note,
@@ -45,6 +47,43 @@ def test_edit_commands_round_trip_through_undo_redo() -> None:
     assert len(project.tracks[0].notes) == 2
 
 
+def test_grouped_note_command_round_trips_as_one_edit() -> None:
+    project = Project(tracks=[Track(name="Lead")])
+    stack = CommandStack()
+    notes = (Note(960, 240, 67, 80), Note(0, 480, 60, 100))
+
+    stack.execute(AddNotesCommand(project, 0, notes))
+    assert project.tracks[0].notes == [notes[1], notes[0]]
+
+
+def test_grouped_note_command_ignores_existing_equal_value_notes_and_undoes_identity() -> None:
+    existing = Note(0, 240, 60, 100)
+    copied = Note(0, 240, 60, 100)
+    project = Project(tracks=[Track(name="Lead", notes=[existing])])
+    stack = CommandStack()
+
+    stack.execute(AddNotesCommand(project, 0, (copied,)))
+    assert project.tracks[0].notes == [existing, copied]
+    assert stack.undo()
+    assert project.tracks[0].notes == [existing]
+
+
+def test_command_stack_empty_operations_and_listener_notifications() -> None:
+    project = Project(tracks=[Track(name="Lead")])
+    stack = CommandStack()
+    notifications = []
+    stack.add_listener(lambda: notifications.append(tuple(project.tracks[0].notes)))
+
+    assert stack.undo() is False
+    assert stack.redo() is False
+    stack.execute(AddNoteCommand(project, 0, Note(0, 120, 60)))
+    assert stack.undo()
+    assert stack.redo()
+    stack.clear()
+    assert stack.can_undo is False and stack.can_redo is False
+    assert len(notifications) == 3
+
+
 def test_note_hit_testing_returns_topmost_matching_note() -> None:
     project = Project(
         tracks=[Track(name="Lead", notes=[Note(0, 480, 60), Note(120, 240, 60), Note(0, 240, 64)])]
@@ -72,6 +111,11 @@ def test_scheduled_events_respect_solo_and_tick_order() -> None:
         (480, "note_off", 60),
     ]
     assert tick_to_seconds(480, 480, 120) == 0.5
+
+
+def test_scheduled_events_reject_negative_start_tick() -> None:
+    with pytest.raises(ValueError, match="start_tick"):
+        scheduled_events(Project(), start_tick=-1)
 
 
 def test_player_sends_events_without_hardware() -> None:

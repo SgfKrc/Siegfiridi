@@ -119,6 +119,122 @@ def test_piano_roll_project_and_track_boundaries(qapp: QApplication) -> None:
     qapp.processEvents()
 
 
+def test_piano_roll_selection_mode_copies_track_and_previews_offset_paste(
+    qapp: QApplication,
+) -> None:
+    project = Project(
+        tracks=[
+            Track("Lead", notes=[Note(0, 240, 60), Note(240, 360, 64)]),
+            Track("Target"),
+        ]
+    )
+    view = PianoRollView(project, CommandStack())
+    view.resize(800, 600)
+    view.show()
+    qapp.processEvents()
+
+    assert not view.selection_mode
+    view.set_selection_mode(True)
+    assert view.selection_mode
+    assert view.viewport().cursor().shape() == Qt.CursorShape.CrossCursor
+
+    marquee_start = _scene_point(view, 0, 70)
+    marquee_end = _scene_point(view, 700, 55)
+    QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=marquee_start)
+    QTest.mouseMove(view.viewport(), marquee_end)
+    QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=marquee_end)
+    assert view.selected_note_indices == frozenset({0, 1})
+
+    view._clear_selection()
+    first = _scene_point(view, 60, 60)
+    second = _scene_point(view, 300, 64)
+    QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=first)
+    QTest.mouseClick(
+        view.viewport(),
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.ControlModifier,
+        second,
+    )
+    assert view.selected_note_indices == frozenset({0, 1})
+    assert view.copy_selection() == 2
+    assert view.has_clipboard
+    assert len(view.paste_preview_items) == 2
+
+    view.set_track(1)
+    view.set_paste_anchor(960, 72)
+    assert view.paste_anchor == (960, 72)
+    assert len(view.paste_preview_items) == 2
+    assert view.paste_preview_items[0].brush().color().alpha() < 255
+    assert view.paste_selection() == 2
+    assert project.tracks[1].notes == [Note(960, 240, 72), Note(1200, 360, 76)]
+    assert view.paste_anchor is None
+
+    assert view.command_stack.undo()
+    assert project.tracks[1].notes == []
+    view.set_selection_mode(False)
+    assert view.viewport().cursor().shape() == Qt.CursorShape.ArrowCursor
+    view.close()
+    qapp.processEvents()
+
+
+def test_selection_mode_shortcuts_clamp_transposition_and_clear_preview(qapp: QApplication) -> None:
+    project = Project(
+        tracks=[
+            Track("Source", notes=[Note(0, 240, 120), Note(120, 240, 124)]),
+            Track("Target"),
+        ]
+    )
+    view = PianoRollView(project, CommandStack())
+    view.resize(800, 600)
+    view.show()
+    view.set_selection_mode(True)
+    qapp.processEvents()
+
+    source_note = _scene_point(view, 60, 120)
+    QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=source_note)
+    second_source_note = _scene_point(view, 180, 124)
+    QTest.mouseClick(
+        view.viewport(),
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.ControlModifier,
+        second_source_note,
+    )
+    view.setFocus()
+    QTest.keyClick(view, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    assert view.has_clipboard
+
+    view.set_track(1)
+    assert view.set_paste_anchor(-120, 127)
+    assert view.paste_anchor == (0, 123)
+    assert [item.rect().y() for item in view.paste_preview_items]
+    QTest.keyClick(view, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+    assert project.tracks[1].notes == [Note(0, 240, 123), Note(120, 240, 127)]
+
+    QTest.keyClick(view, Qt.Key.Key_Escape)
+    assert view.selected_note_indices == frozenset()
+    assert not view.has_clipboard
+    assert view.paste_preview_items == ()
+    view.close()
+    qapp.processEvents()
+
+
+def test_selection_mode_empty_track_reports_no_copy_or_paste(qapp: QApplication) -> None:
+    view = PianoRollView(Project(tracks=[Track("Empty")]), CommandStack())
+    copied: list[int] = []
+    pasted: list[int] = []
+    view.copy_completed.connect(copied.append)
+    view.paste_completed.connect(pasted.append)
+    view.set_selection_mode(True)
+
+    assert view.copy_selection() == 0
+    assert view.set_paste_anchor(480, 60) is False
+    assert view.paste_selection() == 0
+    assert copied == [0]
+    assert pasted == [0]
+    view.close()
+    qapp.processEvents()
+
+
 def test_piano_roll_pitch_keyboard_is_read_only_and_labeled(qapp: QApplication) -> None:
     project = Project(tracks=[Track("Lead")])
     view = PianoRollView(project, CommandStack())

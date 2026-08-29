@@ -27,6 +27,12 @@ def test_main_window_exposes_style_pack_and_preview_controls() -> None:
     assert window.pack_combo.count() >= 2
     assert window.render_button.isEnabled()
     assert "tracks" in window._project_info.text()
+    assert not window.roll.selection_mode
+    window._selection_mode_button.click()
+    assert window.roll.selection_mode
+    assert window.roll.viewport().cursor().shape().name == "CrossCursor"
+    window._selection_mode_button.click()
+    assert not window.roll.selection_mode
 
     window.close()
     app.processEvents()

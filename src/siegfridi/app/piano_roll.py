@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QKeyEvent, QPainter, QPen, QPixmap, QWheelEvent
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QCursor, QKeyEvent, QPainter, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsLineItem,
     QGraphicsRectItem,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from ..core.editing import (
     AddNoteCommand,
+    AddNotesCommand,
     CommandStack,
     DeleteNoteCommand,
     move_note,
@@ -51,6 +52,10 @@ class PianoRollNoteItem(QGraphicsRectItem):
 class PianoRollView(QGraphicsView):
     """Viewport-cropped piano roll with basic note editing gestures."""
 
+    selection_mode_changed = Signal(bool)
+    copy_completed = Signal(int)
+    paste_completed = Signal(int)
+
     ROW_HEIGHT = 14.0
     RULER_HEIGHT = 28.0
     TICK_WIDTH = 0.25
@@ -73,6 +78,7 @@ class PianoRollView(QGraphicsView):
             "ruler": QColor("#292d39"),
             "ruler_text": QColor("#f0dbe5"),
             "cursor": QColor("#f7d06b"),
+            "paste": QColor("#8fd5c7"),
         },
         "high-contrast": {
             "scene": QColor("#090b0e"),
@@ -82,6 +88,7 @@ class PianoRollView(QGraphicsView):
             "ruler": QColor("#18232c"),
             "ruler_text": QColor("#ffffff"),
             "cursor": QColor("#ffe066"),
+            "paste": QColor("#8bd6ff"),
         },
         "quiet-light": {
             "scene": QColor("#f5f7fa"),
@@ -91,6 +98,7 @@ class PianoRollView(QGraphicsView):
             "ruler": QColor("#dce3eb"),
             "ruler_text": QColor("#253342"),
             "cursor": QColor("#c45b23"),
+            "paste": QColor("#2d789f"),
         },
     }
 
@@ -106,10 +114,24 @@ class PianoRollView(QGraphicsView):
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
         self.project = project or Project()
         self.command_stack = command_stack or CommandStack()
         self.track_index = 0
         self.selected_note_index: int | None = None
+        self._selected_note_indices: set[int] = set()
+        self._selection_mode = False
+        self._selection_drag_start: QPointF | None = None
+        self._selection_rect_item: QGraphicsRectItem | None = None
+        self._clipboard_notes: tuple[Note, ...] = ()
+        self._clipboard_origin_tick = 0
+        self._clipboard_origin_pitch = 0
+        self._paste_anchor: tuple[int, int] | None = None
+        self._paste_preview_items: list[QGraphicsRectItem] = []
+        self._paste_cursor: QGraphicsLineItem | None = None
+        self._paste_pitch_cursor: QGraphicsLineItem | None = None
+        self._paste_cursor_label: QGraphicsSimpleTextItem | None = None
         self._interaction: _Interaction | None = None
         self._keyboard_keys: dict[int, QGraphicsRectItem] = {}
         self._keyboard_labels: dict[int, QGraphicsSimpleTextItem] = {}
@@ -123,12 +145,14 @@ class PianoRollView(QGraphicsView):
         self._playback_cursor_label: QGraphicsSimpleTextItem | None = None
         self._ruler_labels: dict[int, QGraphicsSimpleTextItem] = {}
         self.command_stack.add_listener(self.refresh)
+        self._update_cursor()
         self.refresh()
 
     def set_project(self, project: Project) -> None:
         self.project = project
         self.track_index = min(self.track_index, max(0, len(project.tracks) - 1))
-        self.selected_note_index = None
+        self._clear_selection()
+        self.clear_clipboard()
         self.refresh()
 
     def set_track(self, track_index: int) -> None:
@@ -138,8 +162,119 @@ class PianoRollView(QGraphicsView):
             raise IndexError(f"track index out of range: {track_index}")
         else:
             self.track_index = track_index
-        self.selected_note_index = None
+        self._clear_selection()
         self.refresh()
+
+    @property
+    def selection_mode(self) -> bool:
+        return self._selection_mode
+
+    @property
+    def selected_note_indices(self) -> frozenset[int]:
+        return frozenset(self._selected_note_indices)
+
+    @property
+    def has_clipboard(self) -> bool:
+        return bool(self._clipboard_notes)
+
+    @property
+    def paste_anchor(self) -> tuple[int, int] | None:
+        return self._paste_anchor
+
+    @property
+    def paste_preview_items(self) -> tuple[QGraphicsRectItem, ...]:
+        return tuple(self._paste_preview_items)
+
+    def _clear_selection(self) -> None:
+        self._selected_note_indices.clear()
+        self.selected_note_index = None
+
+    def _update_cursor(self) -> None:
+        cursor = QCursor(
+            Qt.CursorShape.CrossCursor if self._selection_mode else Qt.CursorShape.ArrowCursor
+        )
+        self.setCursor(cursor)
+        self.viewport().setCursor(cursor)
+
+    def set_selection_mode(self, enabled: bool) -> None:
+        """Switch between regular note editing and multi-note selection mode."""
+        self._selection_mode = bool(enabled)
+        self._clear_selection()
+        if not self._selection_mode:
+            self._paste_anchor = None
+        self._update_cursor()
+        self.selection_mode_changed.emit(self._selection_mode)
+        self.refresh()
+
+    def _set_selected_indices(self, indices: set[int]) -> None:
+        if not self.project.tracks:
+            self._clear_selection()
+            return
+        notes = self.project.tracks[self.track_index].notes
+        self._selected_note_indices = {index for index in indices if 0 <= index < len(notes)}
+        self.selected_note_index = min(self._selected_note_indices) if self._selected_note_indices else None
+
+    def copy_selection(self) -> int:
+        """Copy selected notes, or all notes in the selected track when none are marked."""
+        if not self.project.tracks:
+            self.copy_completed.emit(0)
+            return 0
+        notes = self.project.tracks[self.track_index].notes
+        indices = sorted(self._selected_note_indices)
+        self._clipboard_notes = tuple(notes[index] for index in indices) if indices else tuple(notes)
+        if not self._clipboard_notes:
+            self.copy_completed.emit(0)
+            return 0
+        self._clipboard_origin_tick = min(note.start_tick for note in self._clipboard_notes)
+        self._clipboard_origin_pitch = min(note.pitch for note in self._clipboard_notes)
+        self._paste_anchor = (self._clipboard_origin_tick, self._clipboard_origin_pitch)
+        self.refresh()
+        self.copy_completed.emit(len(self._clipboard_notes))
+        return len(self._clipboard_notes)
+
+    def clear_clipboard(self) -> None:
+        self._clipboard_notes = ()
+        self._paste_anchor = None
+
+    def set_paste_anchor(self, tick: int, pitch: int) -> bool:
+        """Move the paste cursor to an arbitrary tick/pitch anchor."""
+        if not self._clipboard_notes:
+            return False
+        pitch_offset = max(note.pitch - self._clipboard_origin_pitch for note in self._clipboard_notes)
+        anchor = (max(0, int(tick)), max(0, min(127 - pitch_offset, int(pitch))))
+        if anchor == self._paste_anchor:
+            return True
+        self._paste_anchor = anchor
+        self.refresh()
+        return True
+
+    def _translated_clipboard_notes(self) -> tuple[Note, ...]:
+        if self._paste_anchor is None:
+            return ()
+        tick, pitch = self._paste_anchor
+        return tuple(
+            Note(
+                tick + note.start_tick - self._clipboard_origin_tick,
+                note.duration_tick,
+                pitch + note.pitch - self._clipboard_origin_pitch,
+                note.velocity,
+            )
+            for note in self._clipboard_notes
+        )
+
+    def paste_selection(self) -> int:
+        """Paste the copied group into the selected destination track as one edit."""
+        if not self.project.tracks or not self._clipboard_notes or self._paste_anchor is None:
+            self.paste_completed.emit(0)
+            return 0
+        notes = self._translated_clipboard_notes()
+        self.command_stack.execute(AddNotesCommand(self.project, self.track_index, notes))
+        track = self.project.tracks[self.track_index]
+        self._set_selected_indices({index for index, item in enumerate(track.notes) if any(item is note for note in notes)})
+        self._paste_anchor = None
+        self.refresh()
+        self.paste_completed.emit(len(notes))
+        return len(notes)
 
     def _tick_to_x(self, tick: int) -> float:
         return self.LEFT_MARGIN + tick * self.TICK_WIDTH
@@ -290,6 +425,11 @@ class PianoRollView(QGraphicsView):
             track = self.project.tracks[self.track_index]
             max_tick = max(max_tick, max((note.end_tick for note in track.notes), default=0))
         max_tick = max(max_tick, self._playback_tick)
+        if self._paste_anchor is not None:
+            max_tick = max(
+                max_tick,
+                max((note.end_tick for note in self._translated_clipboard_notes()), default=0),
+            )
         width = self._tick_to_x(max_tick + self.GRID_TICK)
         height = self.RULER_HEIGHT + 128 * self.ROW_HEIGHT
         scene.setSceneRect(0, 0, width, height)
@@ -348,10 +488,12 @@ class PianoRollView(QGraphicsView):
             for index, note in enumerate(self.project.tracks[self.track_index].notes):
                 item = PianoRollNoteItem(note, self.track_index, index)
                 item.setRect(*self._note_rect(note))
-                selected = index == self.selected_note_index
+                selected = index in self._selected_note_indices
                 item.setBrush(QBrush(self._track_color().lighter(145 if selected else 100)))
                 item.setPen(QPen(QColor("#fff3f7") if selected else QColor("#111118"), 1.2))
                 scene.addItem(item)
+
+        self._draw_paste_preview(scene, width, height)
 
         self._playback_cursor = scene.addLine(
             self._tick_to_x(self._playback_tick),
@@ -376,13 +518,89 @@ class PianoRollView(QGraphicsView):
         for graphics_item in self.scene().items():
             if not isinstance(graphics_item, PianoRollNoteItem):
                 continue
-            selected = graphics_item.note_index == self.selected_note_index
+            selected = graphics_item.note_index in self._selected_note_indices
             graphics_item.setBrush(
                 QBrush(self._track_color().lighter(145 if selected else 100))
             )
             graphics_item.setPen(
                 QPen(QColor("#fff3f7") if selected else QColor("#111118"), 1.2)
             )
+
+    def _draw_paste_preview(self, scene: QGraphicsScene, width: float, height: float) -> None:
+        self._paste_preview_items = []
+        self._paste_cursor = None
+        self._paste_pitch_cursor = None
+        self._paste_cursor_label = None
+        if not self._selection_mode or self._paste_anchor is None or not self._clipboard_notes:
+            return
+        colors = self._THEME_COLORS[self._theme_id]
+        preview_brush = QColor(colors["paste"])
+        preview_brush.setAlpha(92)
+        preview_pen = QColor(colors["paste"])
+        preview_pen.setAlpha(220)
+        for note in self._translated_clipboard_notes():
+            item = scene.addRect(
+                *self._note_rect(note), QPen(preview_pen, 1.4), QBrush(preview_brush)
+            )
+            item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            item.setZValue(15)
+            self._paste_preview_items.append(item)
+
+        tick, pitch = self._paste_anchor
+        cursor_pen = QPen(colors["paste"], 1.4, Qt.PenStyle.DashLine)
+        self._paste_cursor = scene.addLine(
+            self._tick_to_x(tick), self.RULER_HEIGHT, self._tick_to_x(tick), height, cursor_pen
+        )
+        self._paste_cursor.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self._paste_cursor.setZValue(25)
+        self._paste_pitch_cursor = scene.addLine(
+            self.LEFT_MARGIN, self._pitch_to_y(pitch), width, self._pitch_to_y(pitch), cursor_pen
+        )
+        self._paste_pitch_cursor.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self._paste_pitch_cursor.setZValue(25)
+        self._paste_cursor_label = scene.addSimpleText(
+            f"Paste {tick} / {self._pitch_label(pitch)}"
+        )
+        self._paste_cursor_label.setBrush(QBrush(colors["paste"]))
+        self._paste_cursor_label.setPos(self._tick_to_x(tick) + 4, self.RULER_HEIGHT + 2)
+        self._paste_cursor_label.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self._paste_cursor_label.setZValue(26)
+
+    def _in_editable_grid(self, scene_pos: QPointF) -> bool:
+        return scene_pos.x() >= self.LEFT_MARGIN and scene_pos.y() >= self.RULER_HEIGHT
+
+    def _update_selection_rect(self, scene_pos: QPointF) -> None:
+        if self._selection_drag_start is None:
+            return
+        rect = QRectF(self._selection_drag_start, scene_pos).normalized()
+        if self._selection_rect_item is None:
+            pen = QPen(QColor("#8fd5c7"), 1.2, Qt.PenStyle.DashLine)
+            brush = QBrush(QColor(143, 213, 199, 38))
+            self._selection_rect_item = self.scene().addRect(rect, pen, brush)
+            self._selection_rect_item.setZValue(30)
+        else:
+            self._selection_rect_item.setRect(rect)
+
+    def _finish_selection_rect(self) -> None:
+        if self._selection_drag_start is None:
+            return
+        rect = (
+            self._selection_rect_item.rect()
+            if self._selection_rect_item is not None
+            else QRectF()
+        )
+        if self.project.tracks:
+            selected = {
+                index
+                for index, note in enumerate(self.project.tracks[self.track_index].notes)
+                if QRectF(*self._note_rect(note)).intersects(rect)
+            }
+            self._set_selected_indices(selected)
+        if self._selection_rect_item is not None:
+            self.scene().removeItem(self._selection_rect_item)
+        self._selection_drag_start = None
+        self._selection_rect_item = None
+        self.refresh()
 
     def mousePressEvent(self, event) -> None:
         if not self.project.tracks:
@@ -394,21 +612,43 @@ class PianoRollView(QGraphicsView):
                 self.command_stack.execute(
                     DeleteNoteCommand(self.project, self.track_index, item.note_index)
                 )
-                self.selected_note_index = None
+                self._clear_selection()
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
-        if scene_pos.x() < self.LEFT_MARGIN or scene_pos.y() < self.RULER_HEIGHT:
+        if not self._in_editable_grid(scene_pos):
+            return
+        if self._selection_mode:
+            self.setFocus()
+            if item is not None:
+                if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    selected = set(self._selected_note_indices)
+                    if item.note_index in selected:
+                        selected.remove(item.note_index)
+                    else:
+                        selected.add(item.note_index)
+                    self._set_selected_indices(selected)
+                else:
+                    self._set_selected_indices({item.note_index})
+                self.refresh()
+                return
+            if self._clipboard_notes:
+                self.set_paste_anchor(
+                    self._x_to_tick(scene_pos.x()), self._y_to_pitch(scene_pos.y())
+                )
+                return
+            self._selection_drag_start = scene_pos
+            self._update_selection_rect(scene_pos)
             return
         if item is None:
             tick = self._snap(self._x_to_tick(scene_pos.x()))
             pitch = self._y_to_pitch(scene_pos.y())
             note = Note(tick, self.GRID_TICK * 2, pitch)
             self.command_stack.execute(AddNoteCommand(self.project, self.track_index, note))
-            self.selected_note_index = self.project.tracks[self.track_index].notes.index(note)
+            self._set_selected_indices({self.project.tracks[self.track_index].notes.index(note)})
             self.refresh()
             return
-        self.selected_note_index = item.note_index
+        self._set_selected_indices({item.note_index})
         self._update_selection_brushes()
         current = self.project.tracks[self.track_index].notes[item.note_index]
         kind = "resize" if scene_pos.x() >= item.sceneBoundingRect().right() - self.HANDLE_WIDTH else "move"
@@ -422,10 +662,19 @@ class PianoRollView(QGraphicsView):
         )
 
     def mouseMoveEvent(self, event) -> None:
+        scene_pos = self.mapToScene(event.position().toPoint())
+        if self._selection_mode:
+            if self._selection_drag_start is not None:
+                self._update_selection_rect(scene_pos)
+                return
+            if self._clipboard_notes and self._in_editable_grid(scene_pos):
+                self.set_paste_anchor(
+                    self._x_to_tick(scene_pos.x()), self._y_to_pitch(scene_pos.y())
+                )
+                return
         interaction = self._interaction
         if interaction is None:
             return
-        scene_pos = self.mapToScene(event.position().toPoint())
         note = interaction.original
         if interaction.kind == "move":
             start = self._snap(self._x_to_tick(scene_pos.x()) - interaction.offset_tick)
@@ -439,6 +688,10 @@ class PianoRollView(QGraphicsView):
         interaction.item.setRect(*self._note_rect(current))
 
     def mouseReleaseEvent(self, event) -> None:
+        if self._selection_mode and self._selection_drag_start is not None:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._finish_selection_rect()
+            return
         interaction = self._interaction
         self._interaction = None
         if interaction is None or event.button() != Qt.MouseButton.LeftButton:
@@ -463,23 +716,43 @@ class PianoRollView(QGraphicsView):
                 updated.duration_tick,
             )
         self.command_stack.execute(command)
-        self.selected_note_index = interaction.note_index
+        self._set_selected_indices({interaction.note_index})
         self.refresh()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        if event.key() == Qt.Key.Key_Delete and self.selected_note_index is not None:
-            self.command_stack.execute(
-                DeleteNoteCommand(self.project, self.track_index, self.selected_note_index)
-            )
-            self.selected_note_index = None
-            return
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if event.key() == Qt.Key.Key_C:
+                self.copy_selection()
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_V:
+                self.paste_selection()
+                event.accept()
+                return
             if event.key() == Qt.Key.Key_Z:
                 self.command_stack.undo()
                 return
             if event.key() == Qt.Key.Key_Y:
                 self.command_stack.redo()
                 return
+        if event.key() == Qt.Key.Key_Escape:
+            self._clear_selection()
+            self.clear_clipboard()
+            self.refresh()
+            return
+        if event.key() == Qt.Key.Key_Delete and self._selection_mode and self._selected_note_indices:
+            for index in sorted(self._selected_note_indices, reverse=True):
+                self.command_stack.execute(DeleteNoteCommand(self.project, self.track_index, index))
+            self._clear_selection()
+            self.refresh()
+            return
+        if event.key() == Qt.Key.Key_Delete and self.selected_note_index is not None:
+            self.command_stack.execute(
+                DeleteNoteCommand(self.project, self.track_index, self.selected_note_index)
+            )
+            self._clear_selection()
+            self.refresh()
+            return
         super().keyPressEvent(event)
 
     def wheelEvent(self, event: QWheelEvent) -> None:

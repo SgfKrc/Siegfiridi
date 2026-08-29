@@ -3,6 +3,7 @@
 
 from .editing import (
     AddNoteCommand,
+    AddNotesCommand,
     CommandStack,
     DeleteNoteCommand,
     ReplaceNoteCommand,
@@ -23,6 +24,7 @@ from .project_io import (
 
 __all__ = [
     "AddNoteCommand",
+    "AddNotesCommand",
     "CommandStack",
     "DeleteNoteCommand",
     "Note",

@@ -389,6 +389,24 @@ class MainWindow(QMainWindow):
         self._accept_button.setStatusTip("Add reviewed transcription candidates to the project")
         self._accept_button.clicked.connect(self.accept_transcription)
 
+        self._selection_mode_button = QPushButton("Select mode")
+        self._selection_mode_button.setCheckable(True)
+        self._selection_mode_button.setToolTip(
+            "Switch to multi-note selection; click or drag notes in the selected track"
+        )
+        self._selection_mode_button.setStatusTip("Switch between draw mode and select mode")
+        self._selection_mode_button.toggled.connect(self._selection_mode_changed)
+        self._copy_button = QPushButton("Copy")
+        self._copy_button.setToolTip("Copy selected notes, or the complete selected track")
+        self._copy_button.setStatusTip("Copy notes from the selected track")
+        self._copy_button.clicked.connect(self._copy_notes)
+        self._paste_button = QPushButton("Paste")
+        self._paste_button.setToolTip(
+            "Paste the copied notes at the green cursor; move over the roll to position it"
+        )
+        self._paste_button.setStatusTip("Paste copied notes at the paste cursor")
+        self._paste_button.clicked.connect(self._paste_notes)
+
         self._project_info = QLabel()
         self._project_info.setWordWrap(True)
         self._pack_info = QLabel()
@@ -529,6 +547,19 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self._undo_action)
         toolbar.addAction(self._redo_action)
         toolbar.addSeparator()
+        self._copy_action = QAction("Copy notes", self)
+        self._copy_action.setShortcut("Ctrl+C")
+        self._copy_action.setToolTip("Copy selected notes or the selected track (Ctrl+C)")
+        self._copy_action.setStatusTip("Copy notes from the selected track")
+        self._copy_action.triggered.connect(self._copy_notes)
+        self._paste_action = QAction("Paste notes", self)
+        self._paste_action.setShortcut("Ctrl+V")
+        self._paste_action.setToolTip("Paste notes at the paste cursor (Ctrl+V)")
+        self._paste_action.setStatusTip("Paste copied notes at the paste cursor")
+        self._paste_action.triggered.connect(self._paste_notes)
+        toolbar.addAction(self._copy_action)
+        toolbar.addAction(self._paste_action)
+        toolbar.addSeparator()
         toolbar.addWidget(self._play_button)
         toolbar.addWidget(self._pause_button)
         toolbar.addWidget(self._stop_button)
@@ -539,6 +570,13 @@ class MainWindow(QMainWindow):
         panel.setMaximumWidth(460)
         panel_layout = QVBoxLayout(panel)
         panel_layout.setContentsMargins(8, 8, 8, 8)
+        edit_group = QGroupBox("Edit")
+        edit_actions = QHBoxLayout(edit_group)
+        edit_actions.setContentsMargins(6, 6, 6, 6)
+        edit_actions.addWidget(self._selection_mode_button, 1)
+        edit_actions.addWidget(self._copy_button)
+        edit_actions.addWidget(self._paste_button)
+        panel_layout.addWidget(edit_group)
         project_group = QGroupBox("Project")
         project_form = QFormLayout(project_group)
         project_form.addRow("Style", self.style_combo)
@@ -614,6 +652,8 @@ class MainWindow(QMainWindow):
         backdrop_layout.setContentsMargins(0, 0, 0, 0)
         backdrop_layout.addWidget(workspace)
         self.setCentralWidget(self._backdrop)
+        self.roll.copy_completed.connect(self._copy_completed)
+        self.roll.paste_completed.connect(self._paste_completed)
         self._load_background_preferences()
         self._refresh_midi_inputs()
         self.statusBar().showMessage("Ready - click the piano roll to add a note")
@@ -645,6 +685,32 @@ class MainWindow(QMainWindow):
         if index >= 0:
             self.roll.set_track(index)
         self._sync_track_controls()
+
+    def _selection_mode_changed(self, enabled: bool) -> None:
+        self.roll.set_selection_mode(enabled)
+        self.statusBar().showMessage(
+            "Select mode enabled - click or drag notes"
+            if enabled
+            else "Draw mode enabled - click to add a note"
+        )
+
+    def _copy_notes(self) -> None:
+        self.roll.copy_selection()
+
+    def _paste_notes(self) -> None:
+        self.roll.paste_selection()
+
+    def _copy_completed(self, count: int) -> None:
+        if count:
+            self.statusBar().showMessage(f"Copied {count} note{'s' if count != 1 else ''}")
+        else:
+            self.statusBar().showMessage("Nothing to copy")
+
+    def _paste_completed(self, count: int) -> None:
+        if count:
+            self.statusBar().showMessage(f"Pasted {count} note{'s' if count != 1 else ''}")
+        else:
+            self.statusBar().showMessage("Move the paste cursor over the piano roll first")
 
     def _on_project_changed(self) -> None:
         self._dirty = True

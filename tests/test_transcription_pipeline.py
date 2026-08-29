@@ -1,6 +1,9 @@
 import struct
 import time
 import wave
+from types import SimpleNamespace
+
+import pytest
 
 from siegfridi.audio import AudioCache, decode_audio
 from siegfridi.core.models import Note
@@ -76,6 +79,64 @@ def test_worker_returns_structured_failure_without_model() -> None:
     assert response["error_type"] in {"TranscriptionDependencyError", "FileNotFoundError"}
 
 
+def test_worker_emits_structured_success(monkeypatch, tmp_path) -> None:
+    result = object()
+    calls = []
+
+    class MessageSink:
+        def __init__(self) -> None:
+            self.items = []
+
+        def put(self, payload) -> None:
+            self.items.append(payload)
+
+    messages = MessageSink()
+
+    def fake_transcribe(path, **kwargs):
+        calls.append((path, kwargs))
+        return result
+
+    monkeypatch.setattr("siegfridi.workers.transcription.transcribe_file", fake_transcribe)
+    response = run_transcription_job(
+        TranscriptionRequest("song.wav", model_path="model.tflite", cache_dir=str(tmp_path), target_rate=16000),
+        messages,
+    )
+
+    assert response == {"type": "completed", "result": result}
+    assert messages.items[0] == {"type": "started", "audio_path": "song.wav"}
+    assert messages.items[1] == response
+    assert calls[0][0] == "song.wav"
+    assert calls[0][1]["model_path"] == "model.tflite"
+    assert calls[0][1]["target_rate"] == 16000
+    assert calls[0][1]["cache"].directory == tmp_path
+
+
+def test_worker_poll_and_cancel_are_safe_without_a_started_process() -> None:
+    worker = TranscriptionProcess(TranscriptionRequest("missing.wav"))
+    try:
+        assert worker.poll() == []
+        worker.cancel()
+    finally:
+        worker.close()
+
+
+def test_worker_cancel_terminates_a_live_process(monkeypatch) -> None:
+    worker = TranscriptionProcess(TranscriptionRequest("missing.wav"))
+    events = []
+    fake_process = SimpleNamespace(
+        is_alive=lambda: True,
+        terminate=lambda: events.append("terminate"),
+        join=lambda timeout=None: events.append(("join", timeout)),
+    )
+    worker._process = fake_process
+
+    worker.cancel()
+
+    assert events == ["terminate", ("join", 1.0)]
+    assert worker._process is None
+    worker.close()
+
+
 def test_worker_process_can_be_cancelled_or_report_failure() -> None:
     worker = TranscriptionProcess(TranscriptionRequest("missing.wav"))
     worker.start()
@@ -93,3 +154,22 @@ def test_worker_process_can_be_cancelled_or_report_failure() -> None:
 
     assert any(item["type"] == "started" for item in messages)
     assert any(item["type"] == "failed" for item in messages)
+
+
+def test_worker_context_manager_starts_and_closes(monkeypatch) -> None:
+    worker = TranscriptionProcess(TranscriptionRequest("missing.wav"))
+    started = []
+
+    monkeypatch.setattr(worker, "start", lambda: started.append(True))
+    monkeypatch.setattr(worker, "close", lambda: started.append(False))
+    with worker as entered:
+        assert entered is worker
+    assert started == [True, False]
+
+
+def test_worker_start_rejects_duplicate_running_process(monkeypatch) -> None:
+    worker = TranscriptionProcess(TranscriptionRequest("missing.wav"))
+    monkeypatch.setattr(type(worker), "is_running", property(lambda _self: True))
+
+    with pytest.raises(RuntimeError, match="already running"):
+        worker.start()
